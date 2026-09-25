@@ -1,0 +1,27 @@
+{
+  "schema_version": "resource-policy-v1",
+  "hardware_policy": "one fixed node, fixed CPU affinity, fixed memory limit, fixed one-process/thread setting",
+  "tracks": {
+    "constrained_resource": {
+      "purpose": "engineering usability under a fixed finite budget",
+      "wall_seconds": 120,
+      "evaluation_limit": 20000,
+      "memory_limit_gib": 8,
+      "threads": 1
+    },
+    "capability_ceiling": {
+      "purpose": "method capacity under a larger but still finite predeclared budget",
+      "wall_seconds": 900,
+      "evaluation_limit": 500000,
+      "memory_limit_gib": 32,
+      "threads": 1
+    }
+  },
+  "calibration": {
+    "pilot_wall_seconds": [120, 300, 900],
+    "pilot_evaluation_limits": [20000, 100000, 500000],
+    "freeze_rule": "select the two budgets before formal runs using representative-task throughput, startup, search-time, and memory summaries; never increase a budget after seeing formal outcomes",
+    "startup_reporting": "Julia/Python startup and compilation are reported separately and their inclusion in wall time is explicit"
+  },
+  "failure_states": ["success", "timeout", "memory_limit", "crash", "invalid_output", "not_applicable"]
+}

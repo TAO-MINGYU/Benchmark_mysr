@@ -1,0 +1,19 @@
+{
+  "schema_version": "seed-ledger-v1",
+  "seed_policy": "fixed labels are shared by methods; streams are independent by role",
+  "pilot_seeds": [23654, 15795, 860, 5390, 16850],
+  "formal_search_seeds": [23654, 15795, 860, 5390, 16850, 29910, 4426, 21962, 14423, 28020],
+  "deterministic_repeats": 2,
+  "streams": {
+    "dataset": "dataset seed is recorded per task and never reused as search state",
+    "split": "split seed is recorded per task and fixed before method runs",
+    "noise": "noise seed is independent of dataset, split, and search seeds",
+    "search": "formal_search_seeds",
+    "restart": "restart count is part of the resource budget"
+  },
+  "statistics": {
+    "primary_unit": "formula_family",
+    "per_seed_results_required": true,
+    "report": ["median", "mean", "quantiles", "recovery_rate", "timeout_rate", "invalid_rate", "seed_sensitivity", "paired_method_difference", "family_level_confidence_interval"]
+  }
+}

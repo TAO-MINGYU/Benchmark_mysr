@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Formal external SR task record",
+  "type": "object",
+  "required": [
+    "source",
+    "source_revision",
+    "license",
+    "task_id",
+    "ground_truth_available",
+    "variables",
+    "units",
+    "legal_domain",
+    "operator_set",
+    "original_split",
+    "noise_policy",
+    "provenance_hash"
+  ],
+  "properties": {
+    "source": {"type": "string"},
+    "source_revision": {"type": "string"},
+    "license": {"type": "string"},
+    "task_id": {"type": "string"},
+    "ground_truth_available": {"type": "boolean"},
+    "variables": {"type": "array", "items": {"type": "string"}},
+    "units": {"type": "object"},
+    "legal_domain": {"type": "object"},
+    "operator_set": {"type": "array", "items": {"type": "string"}},
+    "original_split": {"type": "object"},
+    "noise_policy": {"type": "object"},
+    "provenance_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

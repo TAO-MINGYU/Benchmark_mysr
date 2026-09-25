@@ -1,0 +1,31 @@
+# Python and Julia caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.julia/
+
+# Local environments
+.venv/
+.conda/
+env/
+
+# Downloaded or generated data
+datasets/raw/
+datasets/cache/
+datasets/generated/
+
+# Full experiment outputs
+results/runs/
+results/cache/
+
+# Build and editor artifacts
+build/
+dist/
+.DS_Store
+Thumbs.db
+*.log

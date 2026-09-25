@@ -1,0 +1,157 @@
+{
+  "schema_version": "formal-benchmark-v1",
+  "benchmark_id": "mysr-formal-sr-v1",
+  "status": "protocol-draft",
+  "source_policy": {
+    "raw_data_in_repository": false,
+    "candidate_tasks_require_license_and_integrity_review": true,
+    "task_manifest_must_record": [
+      "source",
+      "source_revision",
+      "license",
+      "task_id",
+      "ground_truth_available",
+      "variables",
+      "units",
+      "legal_domain",
+      "operator_set",
+      "original_split",
+      "noise_policy",
+      "provenance_hash"
+    ]
+  },
+  "sources": [
+    {
+      "source_id": "srbench-2025",
+      "url": "https://github.com/cavalab/srbench",
+      "revision": "dc3f6daa93bf10955df8775256a6f8644f38fd93",
+      "license": "upstream repository and per-dataset licenses",
+      "license_status": "audit-per-task-before-ingest",
+      "dataset_revision": "7c1f4bdc00136dc2e55c87fa6b8ba6e8af6d1a68",
+      "task_counts": {"black_box": 122, "ground_truth": 130},
+      "notes": "Use one pinned SRBench 2025 revision and its container/interface protocol; do not mix published 2021 results."
+    },
+    {
+      "source_id": "srsd-feynman",
+      "url": "https://github.com/omron-sinicx/srsd-benchmark",
+      "revision": "7a002b4919f910976573ad43174a67517891c52a",
+      "license": "upstream repository and task-specific terms",
+      "license_status": "audit-before-redistribution",
+      "task_counts": {"feynman": 120, "dummy_variable": 120},
+      "notes": "Retain the source easy/medium/hard metadata and normalized edit distance tooling."
+    },
+    {
+      "source_id": "odebench",
+      "url": "https://github.com/GPBench/ODEBench",
+      "revision": "4cab6369135be24a6b15444f12671861fd32fd44",
+      "license": "upstream repository and task-specific terms",
+      "license_status": "audit-before-redistribution",
+      "task_counts": {"ode_system": 63},
+      "official_conditions": {
+        "trajectory_points": 150,
+        "multiplicative_gaussian_noise_percent": [1, 2, 3, 4, 5],
+        "subsampling_percent": 50
+      },
+      "notes": "Use the official generator/noise policy; add only one predeclared extension perturbation on calibration tasks."
+    },
+    {
+      "source_id": "legacy-classic",
+      "url": "https://huggingface.co/datasets/EquationDiscovery/Equation_Recovery_Benchmark",
+      "revision": "95bf15c27de68c3f170ca6140d2e4a811c60344f",
+      "license": "per-collection upstream terms (classic collections declare BSD-3-Clause)",
+      "license_status": "audit-per-task-before-ingest",
+      "task_counts": {"families": ["Nguyen", "Keijzer", "Pagie-1", "Vladislavleva", "Korns"]},
+      "notes": "Report as an independent legacy-classic stratum, not as a second copy of the modern SRBench aggregate."
+    }
+  ],
+  "materials": [
+    {
+      "material_id": "A",
+      "name": "srbench-unified-core",
+      "source_ids": ["srbench-2025", "legacy-classic"],
+      "strata": ["ground_truth", "black_box", "legacy_classic"],
+      "black_box_exact_recovery_allowed": false
+    },
+    {
+      "material_id": "B",
+      "name": "scientific-robustness-extension",
+      "source_ids": ["srsd-feynman", "odebench"],
+      "strata": ["srsd_feynman", "srsd_dummy_variable", "ode_system"],
+      "black_box_exact_recovery_allowed": true
+    }
+  ],
+  "methods": [
+    {"method_id": "pysr", "role": "primary_ancestor_baseline", "run_order": 1},
+    {"method_id": "operon", "role": "high_performance_gp_baseline", "run_order": 2},
+    {"method_id": "dsr", "role": "neural_symbolic_baseline", "run_order": 3},
+    {"method_id": "ai_feynman_2", "role": "physics_prior_baseline", "run_order": 4},
+    {"method_id": "gplearn", "role": "transparent_gp_baseline", "run_order": 5},
+    {"method_id": "tf4sr", "role": "transformer_scientific_baseline", "run_order": 6},
+    {"method_id": "mysr", "role": "final_target", "run_order": 7}
+  ],
+  "tracks": {
+    "common_space": {
+      "description": "Matched data, legal domain, operator set, scoring, preprocessing, and resource accounting.",
+      "required": true
+    },
+    "native_default": {
+      "description": "Method defaults are retained and every deviation is recorded.",
+      "required": true
+    }
+  },
+  "common_protocol": {
+    "split_names": ["train", "validation", "test"],
+    "operator_set": ["add", "subtract", "multiply", "divide", "integer_power", "sin", "cos", "exp", "log", "sqrt"],
+    "complexity_metric": "operator_and_terminal_node_count",
+    "primary_metrics": ["clean_test_nrmse", "exact_or_structural_recovery", "complexity", "wall_time", "peak_memory"],
+    "black_box_primary_metric": "test_nrmse",
+    "preprocessing": "fit preprocessing on train only and apply unchanged to validation/test",
+    "invalid_prediction_policy": "record invalid_output and do not silently impute"
+  },
+  "noise_policy": {
+    "variants": ["clean", "output_noise_01", "output_noise_05", "output_noise_10"],
+    "sigma_definition": "noise_level * std(y_train_clean)",
+    "noise_distribution": "independent_zero_mean_gaussian",
+    "seed_stream": "noise",
+    "ground_truth": {
+      "train_and_validation_target": "noisy_observation",
+      "test_target": "retain_noisy_observation_and_clean_latent_truth",
+      "primary_metric_target": "clean_latent_truth",
+      "secondary_metric_target": "noisy_observation"
+    },
+    "black_box": {
+      "train_and_validation_target": "noisy_observation",
+      "test_target": "unchanged_observed_target",
+      "exact_recovery_claim": false
+    },
+    "extension": {
+      "name": "heteroscedastic_output_noise",
+      "scope": "predeclared_calibration_subset_only",
+      "scale": "noise_level * (0.5 + abs(y_train_clean) / max(abs(y_train_clean))) * std(y_train_clean)"
+    }
+  },
+  "resource_policy": {
+    "pilot_seeds": 5,
+    "formal_seeds": 10,
+    "tracks": ["constrained_resource", "capability_ceiling"],
+    "calibration": "run representative tasks with all baselines, measure throughput/startup/search/memory, then freeze without method-specific exceptions",
+    "initial_candidates": {
+      "evaluation_limits": [20000, 100000, 500000],
+      "wall_seconds": [120, 300, 900]
+    },
+    "startup_and_precompile": "report separately from algorithm search time"
+  },
+  "execution_order": [
+    "catalog_and_data_processing",
+    "baseline_adapters_and_pilot",
+    "protocol_freeze",
+    "baseline_runs",
+    "mysr_code_quality_window",
+    "final_mysr_runs"
+  ],
+  "publication": {
+    "results_root": "/home/taomingyu/taomingyu_5/MySR_Benchmark/<run-id>",
+    "github_contents": ["manifest", "source_refs", "generators", "adapters", "environment_locks", "seed_ledger", "metrics_schema", "reproduction_guide"],
+    "large_artifacts": "versioned external archive or DOI"
+  }
+}

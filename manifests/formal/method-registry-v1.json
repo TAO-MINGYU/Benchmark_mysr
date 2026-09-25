@@ -1,0 +1,28 @@
+{
+  "schema_version": "method-registry-v1",
+  "result_contract": [
+    "selected_expression",
+    "full_frontier",
+    "train_score",
+    "validation_score",
+    "test_score",
+    "complexity",
+    "runtime",
+    "cpu_time",
+    "peak_memory",
+    "evaluations",
+    "failure_status",
+    "seed"
+  ],
+  "methods": [
+    {"method_id": "pysr", "adapter": "pysr", "supports": ["ground_truth", "black_box", "legacy_classic"], "native_environment": "env_pysr", "run_order": 1},
+    {"method_id": "operon", "adapter": "operon", "supports": ["ground_truth", "black_box", "legacy_classic"], "native_environment": "env_operon", "run_order": 2},
+    {"method_id": "dsr", "adapter": "dsr", "supports": ["ground_truth", "black_box", "legacy_classic"], "native_environment": "env_dsr", "run_order": 3},
+    {"method_id": "ai_feynman_2", "adapter": "ai_feynman_2", "supports": ["ground_truth", "srsd_feynman", "srsd_dummy_variable"], "native_environment": "env_ai_feynman", "run_order": 4, "not_applicable_reason": "physics-prior method is not applicable to every black-box task"},
+    {"method_id": "gplearn", "adapter": "gplearn", "supports": ["ground_truth", "black_box", "legacy_classic"], "native_environment": "env_gplearn", "run_order": 5},
+    {"method_id": "tf4sr", "adapter": "tf4sr", "supports": ["ground_truth", "srsd_feynman", "srsd_dummy_variable"], "native_environment": "env_tf4sr", "run_order": 6, "not_applicable_reason": "pretrained Transformer is evaluated on compatible scientific equation tasks; it is not forced onto arbitrary black-box data"},
+    {"method_id": "mysr", "adapter": "mysr", "supports": ["ground_truth", "black_box", "legacy_classic", "srsd_feynman", "srsd_dummy_variable", "ode_system"], "native_environment": "env_mysr", "run_order": 7}
+  ],
+  "not_applicable_policy": "record not_applicable and reason; never alter task membership to make a method applicable",
+  "serial_reproducibility": "all adapters expose one process and one thread mode for the formal serial track"
+}

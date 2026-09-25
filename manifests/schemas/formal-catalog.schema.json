@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MySR formal benchmark catalog",
+  "type": "object",
+  "required": ["schema_version", "benchmark_id", "sources", "materials", "methods", "tracks", "common_protocol", "noise_policy", "resource_policy", "execution_order"],
+  "properties": {
+    "schema_version": {"const": "formal-benchmark-v1"},
+    "benchmark_id": {"type": "string"},
+    "sources": {"type": "array", "minItems": 4},
+    "materials": {"type": "array", "minItems": 2},
+    "methods": {"type": "array", "minItems": 6},
+    "tracks": {"type": "object", "required": ["common_space", "native_default"]},
+    "common_protocol": {"type": "object"},
+    "noise_policy": {"type": "object"},
+    "resource_policy": {"type": "object"},
+    "execution_order": {"type": "array", "minItems": 6}
+  }
+}

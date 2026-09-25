@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "benchmark-mysr"
+version = "0.1.0.dev0"
+description = "Formal reproducible symbolic-regression benchmark protocol for MySR"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "Mingyu Tao"}]
+dependencies = ["numpy>=1.24,<3"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+benchmark-mysr = "benchmark_mysr.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/TAO-MINGYU/Benchmark_mysr"
+
+[tool.setuptools.packages.find]
+include = ["benchmark_mysr*"]
+
+[tool.setuptools.data-files]
+"share/benchmark_mysr/manifests" = ["manifests/README.md"]
+"share/benchmark_mysr/manifests/schemas" = ["manifests/schemas/*.json"]
+"share/benchmark_mysr/manifests/formal" = ["manifests/formal/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
