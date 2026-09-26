@@ -23,6 +23,8 @@ remain in the versioned external archive rather than being copied into Git histo
 See [`FORMAL_BENCHMARK.md`](FORMAL_BENCHMARK.md) and
 [`BENCHMARK_USAGE_PLAN.md`](BENCHMARK_USAGE_PLAN.md) for the complete protocol.
 
+The method-to-task allocation and four-group baseline execution matrix are in [`HORIZONTAL_COMPARISON_PLAN.md`](HORIZONTAL_COMPARISON_PLAN.md).
+
 ## Methods
 
 The fixed horizontal comparison roster is PySR, Operon, DSR, AI-Feynman 2.0,
