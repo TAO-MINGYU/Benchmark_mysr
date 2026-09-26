@@ -37,7 +37,8 @@ grace for final native output. Startup/scoring overhead is reported separately
 and remains included in total runtime. CPU measurements are sampled lower bounds;
 RSS limits are sampled enforcement, not kernel cgroup guarantees. Slurm's incorrect
 `RealMemory=1 MiB` configuration still prevents a scheduler memory-efficiency claim.
-Jobs use one CPU with `srun --cpu-bind=cores` and one numerical-library thread.
+Native solver temporary files are written in a private node-local run directory,
+then copied to the durable run archive after the worker exits. Jobs use one CPU with `srun --cpu-bind=cores` and one numerical-library thread.
 
 These runs use a documented **native-method configuration**. They do not claim
 an identical mathematical search space or identical evaluation accounting:

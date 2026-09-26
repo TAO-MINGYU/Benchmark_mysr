@@ -100,3 +100,20 @@ def test_seed_streams_are_disjoint():
     p=Path(__file__).resolve().parents[1]/'manifests/formal/seed-ledger-v1.json'
     d=json.loads(p.read_text())
     assert not set(d['pilot_seeds']) & set(d['formal_search_seeds'])
+
+
+def test_unknown_evaluations_need_explicit_semantics():
+    from benchmark_mysr.methods import validate_result_record, not_applicable_result
+    r=not_applicable_result('pysr',seed=1,reason='test')
+    r['evaluations']=None
+    with pytest.raises(ValueError):
+        validate_result_record(r)
+    r['evaluation_semantics']='not_exposed'
+    validate_result_record(r)
+
+
+def test_gplearn_export_retains_full_float_precision():
+    from types import SimpleNamespace
+    from benchmark_mysr.external.solvers import gplearn_expression
+    p=SimpleNamespace(program=[SimpleNamespace(name='add',arity=2),0,0.12345678912345678])
+    assert gplearn_expression(p)=='add(x0,0.12345678912345678)'

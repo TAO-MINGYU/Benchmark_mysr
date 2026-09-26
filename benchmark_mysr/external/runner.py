@@ -4,6 +4,8 @@ import hashlib
 import json
 import os
 import signal
+import shutil
+import tempfile
 import socket
 import subprocess
 import sys
@@ -48,6 +50,11 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
     request['data'] = str(Path(request['data']).resolve())
     request['data_hashes'] = {split: digest(Path(request['data']) / f'{split}.csv') for split in ('train','validation','test')}
     code_root = Path(__file__).resolve().parents[2]
+    metadata_path = Path(request['data'])/'manifest.json'
+    if metadata_path.exists():
+        checksums = json.loads(metadata_path.read_text()).get('checksums', {})
+        if checksums and checksums != request['data_hashes']:
+            raise ValueError('Input split checksums differ from the materialized manifest')
     request['adapter_hashes'] = {p.name: digest(p) for p in Path(__file__).parent.glob('*.py')}
     request_hash = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
     output.mkdir(parents=True, exist_ok=True)
@@ -62,19 +69,21 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
     fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     os.close(fd)
     proc = None
+    scratch = tempfile.TemporaryDirectory(prefix='mysr-solver-')
+    working = Path(scratch.name)
     try:
         dump(output / 'request.json', request)
         python, env = environment(request['method'], env_root, code_root)
-        env['MPLCONFIGDIR'] = str(output / 'mpl-cache')
+        env['MPLCONFIGDIR'] = str(working / 'mpl-cache')
         begun, peak, cpu, timed_stage = time.monotonic(), 0, 0.0, None
         with (output/'stdout.log').open('w') as stdout, (output/'stderr.log').open('w') as stderr:
             proc = subprocess.Popen([str(python), '-m', 'benchmark_mysr.external.worker', str(output/'request.json')],
-                                    cwd=output, env=env, stdout=stdout, stderr=stderr, start_new_session=True)
+                                    cwd=working, env=env, stdout=stdout, stderr=stderr, start_new_session=True)
             watch = psutil.Process(proc.pid)
             stage, stage_start = 'startup', begun
             stage_info = {}
             while proc.poll() is None:
-                stage_file = output / 'stage.json'
+                stage_file = working / 'stage.json'
                 if stage_file.exists():
                     info = json.loads(stage_file.read_text())
                     if info['stage'] != stage:
@@ -99,7 +108,10 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
                 elif time.monotonic()-stage_start > limit + (2 if stage=='search' else 0):
                     timed_stage = stage + '_timeout'
                 if timed_stage:
-                    os.killpg(proc.pid, signal.SIGKILL)
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     break
                 time.sleep(0.2)
             proc.wait()
@@ -108,6 +120,7 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
                 os.killpg(proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+        shutil.copytree(working, output, dirs_exist_ok=True)
         payload_path = output/'worker-result.json'
         result = json.loads(payload_path.read_text()) if payload_path.exists() else {}
         if timed_stage or not result:
@@ -160,6 +173,7 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
         if proc is not None and proc.poll() is None:
             os.killpg(proc.pid, signal.SIGKILL)
             proc.wait()
+        scratch.cleanup()
         lock.unlink(missing_ok=True)
 
 

@@ -105,8 +105,8 @@ def fit(method, api, X, y, request):
                 feature_names=names)
         m.fit(X, y)
         # gplearn has no HOF: preserve every surviving program exposed by its history.
-        programs = {str(p): p for generation in m._programs for p in (generation or []) if p is not None}
-        programs[str(m._program)] = m._program
+        programs = {gplearn_expression(p): p for generation in m._programs for p in (generation or []) if p is not None}
+        programs[gplearn_expression(m._program)] = m._program
         for expr, p in programs.items():
             candidates.append((gplearn_expression(p), p.length_, p.execute))
         details.update(evaluation_count=pop * len(m.run_details_['generation']),

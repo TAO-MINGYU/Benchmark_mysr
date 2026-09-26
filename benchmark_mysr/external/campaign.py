@@ -52,10 +52,28 @@ def workunit(manifest, method, index, output, archive, sources, env_root, ode=Fa
                         part['budget']=dict(budget, evaluations=max(1,budget['evaluations']//meta['dimension']),
                                             search_seconds=budget['search_seconds']/meta['dimension'])
                         components.append(run(part,out/f'component-{j}',env_root))
-                    r={'status':'success' if all(c['status']=='success' for c in components) else 'incomplete_system',
+                    statuses = [c['status'] for c in components]
+                    status = ('success' if all(s == 'success' for s in statuses) else
+                              'not_applicable' if all(s == 'not_applicable' for s in statuses) else
+                              'timeout' if any(s.endswith('_timeout') for s in statuses) else 'incomplete_system')
+                    r={'status':status,
                        'task_id':task,'method':method,'variant':variant,'seed':seed,'resource_track':track,
                        'components':[{'component':j,'status':c['status'],'result':f'component-{j}/result.json'} for j,c in enumerate(components)],
                        'budget':budget,'metric':meta['metric'],'formal_claim':False}
+                    r.update(selected_expression=[c.get('selected_expression') for c in components],
+                             full_frontier=[f'component-{j}/' + c['full_frontier'] if isinstance(c.get('full_frontier'),str) else None for j,c in enumerate(components)],
+                             runtime=sum(c['runtime'] for c in components), cpu_time=sum(c['cpu_time'] for c in components),
+                             peak_memory=max(c['peak_memory'] for c in components),
+                             evaluations=sum(c['evaluations'] for c in components) if all(c['evaluations'] is not None for c in components) else None,
+                             evaluation_semantics='sum_of_component_native_counts_when_available',
+                             failure_status=status if status in ('success','not_applicable','timeout') else 'invalid_output',
+                             failure_reason='; '.join(c.get('reason','') for c in components),
+                             complexity=[c.get('complexity') for c in components],
+                             train_score=[c.get('train_score') for c in components],
+                             validation_score=[c.get('validation_score') for c in components],
+                             test_score=[c.get('test_score') for c in components])
+                    from benchmark_mysr.methods import validate_result_record
+                    validate_result_record(r)
                     dump(out/'result.json',r)
                 else:
                     request.update(data=str(archive/item['data_path']/variant),input_units=input_units(archive,task))
