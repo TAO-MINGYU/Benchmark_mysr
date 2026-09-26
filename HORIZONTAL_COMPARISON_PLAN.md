@@ -80,3 +80,7 @@ Slurm job 名必须包含 `baseline`、method、material/stratum、noise、resou
 ## 8. 完整横向任务登记
 
 正式外部方法矩阵已经登记为 `20260926-external-horizontal-matrix-v1`：315 个 tabular 任务 × 6 个外部方法 × 4 个 noise variants × 2 个 resource tracks × 10 个 search seeds，共 151,200 个 run records，按方法拆成六个 315-task Slurm arrays。MySR 不在这些 arrays 中。数组 33895–33900 当前保持 `JobHeldUser`，因为统一 solver adapters 尚未全部完成；释放前必须通过表达式导出、评分、资源记录和失败状态 smoke。ODEBench 仍是独立动态系统扩展，不进入这批 tabular arrays。
+
+## 9. 进阶 ODEBench 登记
+
+ODEBench 的 63 个系统和 5 个官方轨迹条件另有 `20260926-external-ode-extension-v1` manifest：六个外部方法 × 5 条件 × 2 个 resource tracks × 10 个 seeds，共 37,800 个系统级记录。数组 33901–33906 已提交并保持 `JobHeldUser`；由于六个外部方法的 ODE adapters 尚未通过统一输出契约，释放前只能继续保持 held。这个扩展不与 315 个 tabular 任务的总分混合。
