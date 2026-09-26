@@ -35,6 +35,8 @@ def test_pool_executes_each_workunit_once_on_distinct_logical_cpus(tmp_path):
     code = tmp_path/'code'
     package = code/'benchmark_mysr/external'
     package.mkdir(parents=True)
+    (code/'benchmark_mysr/__init__.py').touch()
+    (package/'__init__.py').touch()
     (package/'stage.py').write_text('print("/same/staged/root")\n')
     (package/'campaign.py').write_text('''import argparse,json,os,time
 from pathlib import Path

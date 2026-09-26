@@ -117,7 +117,8 @@ def main():
                            NUMEXPR_NUM_THREADS='1', PYTHON_JULIACALL_THREADS='1')
                 log = (output/f"{entry['kind']}-{entry['method']}-{entry['index']}.log").open('a')
                 proc = subprocess.Popen(command(entry, config, cpu, environments[entry['method']], sources),
-                                        env=env, stdout=log, stderr=subprocess.STDOUT)
+                                        cwd=entry['code'], env=env, stdout=log,
+                                        stderr=subprocess.STDOUT)
                 active[cpu] = proc, entry, log, time.monotonic()
                 events.write(json.dumps({'event': 'started', 'time': time.time(),
                     'cpu': cpu, 'pid': proc.pid, 'method': entry['method'],
