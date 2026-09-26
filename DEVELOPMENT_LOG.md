@@ -45,3 +45,6 @@
   identities remain unchanged; interrupted attempts are archived before restart.
 - Documented SMT concurrency as an explicit resource epoch requiring matched
   interpretation in later MySR comparisons, not an algorithmic change.
+- Live full-node startup exposed supervisor NFS import stalls. Added local staging
+  for the unchanged supervisor dependency closure and immutable adapter releases;
+  preserved the first scheduling attempt and its interrupted output for audit.

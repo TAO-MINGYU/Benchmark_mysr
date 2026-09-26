@@ -57,6 +57,19 @@ def main():
     output = Path(config['pool_output']) / args.node / os.environ['SLURM_JOB_ID']
     output.mkdir(parents=True, exist_ok=False)
     assigned = [entry for entry in config['campaigns'] if entry['node'] == args.node]
+    if config.get('supervisor_bundles'):
+        stage_script = Path(assigned[0]['code'])/'benchmark_mysr/external/stage.py'
+        def stage_extra(name):
+            return Path(subprocess.check_output([
+                '/usr/bin/python3', str(stage_script), '--bundles', config['supervisor_bundles'],
+                '--cache', f'/tmp/mysr-external-{os.getuid()}', '--name', name], text=True).strip()) / name
+        supervisor = stage_extra('env_1_mysr')
+        config['supervisor_python'] = str(supervisor/'bin/python')
+        subprocess.run([config['supervisor_python'], '-c',
+                        'import numpy,psutil; print("local supervisor",numpy.__version__,psutil.__version__)'], check=True)
+        for entry in assigned:
+            entry['original_code'] = entry['code']
+            entry['code'] = str(stage_extra('adapter_'+entry['adapter_commit'][:7]))
     environments, sources = {}, None
     groups = []
     for entry in assigned:

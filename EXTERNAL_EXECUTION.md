@@ -139,3 +139,10 @@ release. Low-concurrency and full-node SMT epochs remain identifiable by job ID;
 wall-time comparisons must account for shared-core contention, and MySR must use
 the documented comparable concurrency regime. This operational change alone does
 not turn raw records into reviewed formal results.
+
+A full-node startup probe exposed NFS waits in the supervisor interpreter itself.
+The corrected pool therefore stages the unchanged Python/NumPy/psutil dependency
+closure (36 installed packages, checksum-verified) and both original adapter
+releases on local disk before admitting workers. This changes import locations,
+not package versions, solver code bytes or request hashes. The unsuccessful first
+pool attempt and any interrupted partial runs remain archived.
