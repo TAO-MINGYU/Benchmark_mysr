@@ -76,3 +76,7 @@ ground-truth 任务报告 exact recovery、numeric equivalence、structural-near
 Slurm job 名必须包含 `baseline`、method、material/stratum、noise、resource-track 和 seed。每个 job 输出一条机器可读 JSON；数组索引与 `run-manifest.json` 一一对应。`squeue` 只显示尚未结束的作业；结束后的正式证据使用 `sacct` 和结果 JSON 查询。
 
 本计划只把 baseline calibration 作业作为当前部署对象，不能把 calibration 结果写成最终方法排名。
+
+## 8. 完整横向任务登记
+
+正式外部方法矩阵已经登记为 `20260926-external-horizontal-matrix-v1`：315 个 tabular 任务 × 6 个外部方法 × 4 个 noise variants × 2 个 resource tracks × 10 个 search seeds，共 151,200 个 run records，按方法拆成六个 315-task Slurm arrays。MySR 不在这些 arrays 中。数组 33895–33900 当前保持 `JobHeldUser`，因为统一 solver adapters 尚未全部完成；释放前必须通过表达式导出、评分、资源记录和失败状态 smoke。ODEBench 仍是独立动态系统扩展，不进入这批 tabular arrays。
