@@ -36,7 +36,7 @@ def build(source, system_index, output, clean_source):
     test = differentiated(second)
     clean_test = differentiated(clean['solutions'][0][1])
     # Test uses the entire second clean trajectory for primary derivative accuracy;
-    # noisy second-trajectory prediction is reported separately by the system scorer.
+    # observed second-trajectory row counts are retained as metadata only.
     output.mkdir(parents=True, exist_ok=True)
     dirs = []
     for component in range(system['dim']):

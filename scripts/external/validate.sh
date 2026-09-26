@@ -9,4 +9,4 @@ prefix="${prefixes[$SLURM_ARRAY_TASK_ID]}"
 cache="/tmp/mysr-external-${UID}"
 export STAGED_ENV_ROOT=$(python3 "$EXTERNAL_CODE/benchmark_mysr/external/stage.py" --bundles "$EXTERNAL_BUNDLES" --cache "$cache" --name "$prefix")
 export STAGED_SOURCES=$(python3 "$EXTERNAL_CODE/benchmark_mysr/external/stage.py" --bundles "$EXTERNAL_BUNDLES" --cache "$cache" --name sources)
-srun --cpu-bind=cores --ntasks=1 /data5/taomingyu_5/conda_envs/env_1_mysr/bin/python "$EXTERNAL_CODE/scripts/external/validate.py"
+srun --cpu-bind=cores --ntasks=1 "$EXTERNAL_ARCHIVE/../../conda_envs/env_1_mysr/bin/python" "$EXTERNAL_CODE/scripts/external/validate.py"
