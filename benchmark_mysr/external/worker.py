@@ -69,6 +69,9 @@ def main():
             startup_time = time.monotonic()-started
         else:
             api = prepare(request['method'], request['source_root'])
+            if request['method'] == 'pysr':
+                from benchmark_mysr.external.solvers import warmup_pysr
+                warmup_pysr(api, train[0].shape[1])
             startup_time = time.monotonic()-started
             dump('stage.json', {'stage': 'search', 'time': time.time(), 'startup_seconds': startup_time})
             search_start = time.monotonic()

@@ -131,3 +131,28 @@ def test_aifeynman_entrypoint_uses_staged_python(tmp_path, monkeypatch):
     rewritten=(tmp_path/'native-bin/feynman_sr_test').read_text()
     assert rewritten=='#!'+str(bindir/'python')+'\n'+body
     assert original.read_text().startswith('#!/old/nfs')
+
+
+def test_pysr_warmup_precedes_search_clock(tmp_path, monkeypatch):
+    import sys
+    import benchmark_mysr.external.worker as worker
+    import benchmark_mysr.external.solvers as solvers
+    for split in ('train','validation','test'):
+        (tmp_path/f'{split}.csv').write_text('row_id,x_0,target,target_clean\na,2,4,4\n')
+    request={'method':'pysr','data':str(tmp_path),'source_root':str(tmp_path)}
+    path=tmp_path/'request.json';path.write_text(json.dumps(request))
+    calls=[]
+    def warm(*args):
+        assert not (tmp_path/'stage.json').exists()
+        calls.append('warm')
+    def fit(*args):
+        assert calls==['warm']
+        assert json.loads((tmp_path/'stage.json').read_text())['stage']=='search'
+        return [('x0**2',3,lambda X:X[:,0]**2)],{}
+    monkeypatch.setattr(solvers,'prepare',lambda *a:None)
+    monkeypatch.setattr(solvers,'warmup_pysr',warm)
+    monkeypatch.setattr(solvers,'fit',fit)
+    monkeypatch.setattr(sys,'argv',['worker',str(path)])
+    monkeypatch.chdir(tmp_path)
+    assert worker.main()==0
+    assert json.loads((tmp_path/'worker-result.json').read_text())['startup_seconds']>=0

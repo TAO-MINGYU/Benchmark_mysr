@@ -272,3 +272,16 @@ def local_entrypoints(python):
         entry.write_text('#!' + str(python) + '\n' + body)
         entry.chmod(0o700)
     os.environ['PATH'] = str(target) + os.pathsep + os.environ.get('PATH', '')
+
+
+def warmup_pysr(api, n_features):
+    """Compile the same operator/type path on synthetic data before search timing."""
+    X = np.linspace(0.2, 1.0, 32*n_features).reshape(32, n_features)
+    y = X[:, 0]**2 + X[:, 0]
+    model = api(niterations=2, populations=1, population_size=100, max_evals=1000,
+                ncycles_per_iteration=1, parallelism='serial', deterministic=True,
+                random_state=0, progress=False, verbosity=0,
+                binary_operators=['+', '-', '*', '/'],
+                unary_operators=['sin', 'cos', 'exp', 'log', 'sqrt'],
+                output_directory=str(Path.cwd()/'pysr-warmup'))
+    model.fit(X, y, variable_names=[f'x{i}' for i in range(n_features)])

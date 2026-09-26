@@ -43,7 +43,11 @@ then copied to the durable run archive after the worker exits. Jobs use one CPU 
 These runs use a documented **native-method configuration**. They do not claim
 an identical mathematical search space or identical evaluation accounting:
 
-- PySR enforces `max_evals` but does not expose its actual counter through the
+- PySR first warms the matching operator/type path on 32 synthetic rows with a
+  separate seed and 1,000-evaluation ceiling; this first-fit JIT work is charged to
+  startup and total CPU/runtime, never to the real-data search budget. A fresh
+  estimator and the registered seed are then used for the actual fit.
+  PySR enforces `max_evals` but does not expose its actual counter through the
   installed Python interface; actual evaluations are null with a reason.
 - Operon reports native fitness calls. gplearn reports generated programs and
   uses its protected operators. DSR reports sampled programs, with constants

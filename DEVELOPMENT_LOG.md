@@ -30,3 +30,8 @@
 - Documented native evaluation/complexity differences, DSR compatibility fixes,
   TF4SR applicability/pretraining limits and uncomputed symbolic/rollout metrics.
 - Validation and deployed job IDs are recorded in the external deployment audit.
+
+- Launch timing audit: first-fit PySR JIT was still inside the native fit clock.
+  Added a synthetic-data warmup before the search stage, with fresh estimator/RNG
+  for the actual task. Only PySR arrays are restarted; earlier records remain in
+  the external superseded-run audit. The other five methods are unchanged.
