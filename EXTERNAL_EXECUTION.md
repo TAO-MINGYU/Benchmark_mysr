@@ -76,6 +76,10 @@ previously prepared source has no usable Cython extension; the adapter uses the
 upstream Python evaluator when that extension is absent. This affects throughput
 and is recorded, rather than pretending the Cython build was validated.
 
+AI-Feynman's console-script bodies are retained, with their shebangs rewritten
+in the private run directory to the staged interpreter. Otherwise the Fortran
+launchers would silently return to the NFS environment.
+
 The six locked environments are copied, without package upgrades, to private
 node-local caches from SHA256-verified tar bundles. The unused Julia registry is
 excluded from the offline PySR runtime bundle. Source and environment bundle

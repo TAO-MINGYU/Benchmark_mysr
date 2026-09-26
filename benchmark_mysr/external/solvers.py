@@ -132,6 +132,7 @@ def fit(method, api, X, y, request):
     elif method == 'ai_feynman_2':
         if not request.get('ground_truth_available', False):
             raise NotApplicable('Pre-registered physics/known-expression tasks only; black-box excluded.')
+        local_entrypoints(Path(sys.executable))
         Path('input').mkdir(exist_ok=True)
         np.savetxt('input/train.txt', np.column_stack((X, y)))
         from aifeynman.get_pareto import ParetoSet
@@ -254,3 +255,20 @@ def gplearn_expression(program):
             return f'x{node}'
         return repr(float(node))
     return consume()
+
+
+def local_entrypoints(python):
+    """Preserve native Fortran launcher bodies while relocating their interpreter."""
+    target = Path.cwd() / 'native-bin'
+    target.mkdir(exist_ok=True)
+    for original in python.parent.glob('feynman*'):
+        if not original.is_file():
+            continue
+        content = original.read_text()
+        if not content.startswith('#!'):
+            raise ValueError(f'Unexpected AI-Feynman entrypoint: {original.name}')
+        body = content.split('\n', 1)[1]
+        entry = target / original.name
+        entry.write_text('#!' + str(python) + '\n' + body)
+        entry.chmod(0o700)
+    os.environ['PATH'] = str(target) + os.pathsep + os.environ.get('PATH', '')

@@ -117,3 +117,17 @@ def test_gplearn_export_retains_full_float_precision():
     from benchmark_mysr.external.solvers import gplearn_expression
     p=SimpleNamespace(program=[SimpleNamespace(name='add',arity=2),0,0.12345678912345678])
     assert gplearn_expression(p)=='add(x0,0.12345678912345678)'
+
+
+def test_aifeynman_entrypoint_uses_staged_python(tmp_path, monkeypatch):
+    from benchmark_mysr.external.solvers import local_entrypoints
+    bindir=tmp_path/'env/bin';bindir.mkdir(parents=True)
+    original=bindir/'feynman_sr_test'
+    body='from aifeynman.some_native_module import go\ngo()\n'
+    original.write_text('#!/old/nfs/bin/python\n'+body)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv('PATH','/usr/bin')
+    local_entrypoints(bindir/'python')
+    rewritten=(tmp_path/'native-bin/feynman_sr_test').read_text()
+    assert rewritten=='#!'+str(bindir/'python')+'\n'+body
+    assert original.read_text().startswith('#!/old/nfs')
