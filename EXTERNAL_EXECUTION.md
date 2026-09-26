@@ -117,3 +117,25 @@ component on both compute nodes. `launch.sh` executes a registered work unit and
 writes progress after every completed run. Runtime bundles and result data live
 outside this code repository. Deployment manifests record replacement job IDs
 and the exact code revision.
+
+## Full-node concurrency amendment (2026-09-26)
+
+At the user's request the deployment can replace single-workunit arrays with one
+512-logical-CPU allocation on each of node1 and node2. `node_pool.sbatch` starts a
+manager that pins each independent workunit and its descendants to one distinct
+OS logical CPU. Both SMT siblings are used; each solver still has one thread and
+the original per-run budget. Whole-node CPU reservation is not a claim of 100%
+instantaneous CPU utilization: import, I/O, staging and the final queue tail can
+leave a CPU idle. New work is admitted at eight units per second, and admission
+pauses below 96 GiB host MemAvailable. Existing per-process RSS enforcement stays
+in effect; this is not a scheduler memory reservation or a worst-case aggregate
+memory guarantee.
+
+The pool executes the original immutable adapter releases, retaining per-method
+code hashes, request identity, task membership and output paths. Completed runs
+are reused; interrupted incomplete run directories are preserved in an amendment
+archive before retry. Pool events map each workunit to its job, CPU and code
+release. Low-concurrency and full-node SMT epochs remain identifiable by job ID;
+wall-time comparisons must account for shared-core contention, and MySR must use
+the documented comparable concurrency regime. This operational change alone does
+not turn raw records into reviewed formal results.

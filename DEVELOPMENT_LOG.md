@@ -35,3 +35,13 @@
   Added a synthetic-data warmup before the search stage, with fresh estimator/RNG
   for the actual task. Only PySR arrays are restarted; earlier records remain in
   the external superseded-run audit. The other five methods are unchanged.
+
+## 2026-09-26 — Full-node logical CPU campaign scheduling
+
+- Added a two-node pool launcher with 512 distinct single-CPU workunit slots per
+  node, round-robin admission across method/track queues, bounded startup rate,
+  memory-aware admission and durable workunit/CPU/job event records.
+- Original immutable solver releases, requests, budgets and completed result
+  identities remain unchanged; interrupted attempts are archived before restart.
+- Documented SMT concurrency as an explicit resource epoch requiring matched
+  interpretation in later MySR comparisons, not an algorithmic change.
