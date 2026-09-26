@@ -2,11 +2,13 @@
 """Run frozen external work units on distinct logical CPUs in one Slurm job."""
 import argparse
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import socket
 import subprocess
 import time
@@ -54,7 +56,9 @@ def main():
         raise ValueError(f'{args.workers} workers requested but only {len(cpus)} CPUs allowed')
     if socket.gethostname().split('.')[0] != args.node:
         raise ValueError('Node differs from registered allocation')
-    output = Path(config['pool_output']) / args.node / os.environ['SLURM_JOB_ID']
+    remote = Path(config['pool_output']) / args.node / os.environ['SLURM_JOB_ID']
+    remote.mkdir(parents=True, exist_ok=False)
+    output = Path(config.get('local_pool_root', f'/tmp/mysr-external-pools-{os.getuid()}')) / os.environ['SLURM_JOB_ID']
     output.mkdir(parents=True, exist_ok=False)
     assigned = [entry for entry in config['campaigns'] if entry['node'] == args.node]
     if config.get('supervisor_bundles'):
@@ -93,8 +97,20 @@ def main():
         'workers': args.workers, 'config_sha256': config_hash, 'unit_count': len(queue),
         'single_thread_per_fit': True, 'resource_epoch': 'full-node-smt-v1',
         'minimum_available_memory_gib': config['minimum_available_memory_gib'],
-        'started_at': time.time(),
+        'started_at': time.time(), 'node_local_logs': str(output),
     })
+    shutil.copy2(output/'allocation.json', remote/'allocation.json')
+    publisher = ThreadPoolExecutor(max_workers=1)
+    log_publisher = ThreadPoolExecutor(max_workers=4)
+    log_copies = []
+    publication = None
+    last_publication = 0
+
+    def publish(status, event_text):
+        write_json(remote/'status.json', status)
+        temp = remote/'events.jsonl.tmp'
+        temp.write_text(event_text)
+        temp.replace(remote/'events.jsonl')
     free = deque(cpus[:args.workers])
     active, completed, failures = {}, 0, 0
     stop = False
@@ -117,6 +133,7 @@ def main():
                     completed += 1
                     failures += proc.returncode != 0
                     log.close()
+                    log_copies.append(log_publisher.submit(shutil.copy2, log.name, remote/Path(log.name).name))
                     del active[cpu]
                     free.append(cpu)
             memory = available_memory_gib()
@@ -137,17 +154,36 @@ def main():
                     'cpu': cpu, 'pid': proc.pid, 'method': entry['method'],
                     'kind': entry['kind'], 'index': entry['index'], 'code': entry['code']})+'\n')
                 started += 1
-            write_json(output/'status.json', {'time': time.time(), 'active': len(active),
+            status = {'time': time.time(), 'active': len(active),
                 'queued': len(queue), 'completed': completed, 'failed_workunits': failures,
                 'available_memory_gib': memory, 'stopping': stop,
                 'active_workunits': [{'cpu': cpu, 'pid': x[0].pid, 'method': x[1]['method'],
-                    'kind': x[1]['kind'], 'index': x[1]['index']} for cpu, x in active.items()]})
+                    'kind': x[1]['kind'], 'index': x[1]['index']} for cpu, x in active.items()]}
+            write_json(output/'status.json', status)
+            final = stop or not (queue or active)
+            if final and publication is not None:
+                publication.result()
+            if final or ((publication is None or publication.done()) and time.monotonic()-last_publication >= 10):
+                if publication is not None:
+                    publication.result()
+                publication = publisher.submit(publish, status, (output/'events.jsonl').read_text())
+                last_publication = time.monotonic()
             if stop:
                 # Slurm owns the cgroup, including detached native solver descendants.
                 # Leave interruption evidence for explicit, audited resume preparation.
+                publication.result()
+                publisher.shutdown()
+                log_publisher.shutdown()
+                for copy in log_copies:
+                    copy.result()
                 return 143
             if queue or active:
                 time.sleep(1)
+    publication.result()
+    publisher.shutdown()
+    log_publisher.shutdown()
+    for copy in log_copies:
+        copy.result()
     return 1 if failures else 0
 
 

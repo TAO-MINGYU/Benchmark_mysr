@@ -48,3 +48,6 @@
 - Live full-node startup exposed supervisor NFS import stalls. Added local staging
   for the unchanged supervisor dependency closure and immutable adapter releases;
   preserved the first scheduling attempt and its interrupted output for audit.
+- A live I/O probe measured 10.86 seconds to create four shared log files. Moved
+  pool bookkeeping to retained local files with asynchronous status/event mirrors
+  and completed-console-log publication, keeping solver result storage unchanged.

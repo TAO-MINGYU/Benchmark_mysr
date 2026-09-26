@@ -146,3 +146,10 @@ closure (36 installed packages, checksum-verified) and both original adapter
 releases on local disk before admitting workers. This changes import locations,
 not package versions, solver code bytes or request hashes. The unsuccessful first
 pool attempt and any interrupted partial runs remain archived.
+
+Pool bookkeeping also uses node-local files: live status and events are mirrored
+asynchronously to the archive about every ten seconds, and workunit console logs
+are copied on completion. The allocation record gives the retained local log
+path for interruption recovery. This prevents slow NFS file creation from
+serializing worker admission. Native per-run evidence stays at its original
+durable output paths; the asynchronous files are scheduling diagnostics only.

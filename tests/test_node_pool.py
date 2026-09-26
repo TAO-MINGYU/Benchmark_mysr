@@ -54,6 +54,7 @@ with (a.output_root/f'{a.index}.json').open('x') as f:
     config = tmp_path/'config.json'
     node = socket.gethostname().split('.')[0]
     config.write_text(json.dumps({'pool_output':str(tmp_path/'pool'), 'bundles':'/unused',
+        'local_pool_root':str(tmp_path/'local-pool'),
         'archive':'/unused', 'supervisor_python':sys.executable,
         'minimum_available_memory_gib':0, 'campaigns':[{'node':node,
             'code':str(code), 'environment':'fake', 'method':'fake', 'kind':'tabular',
