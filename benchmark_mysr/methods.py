@@ -94,7 +94,10 @@ def validate_result_record(record: dict[str, Any]) -> None:
     status = record["failure_status"]
     if status not in {"success", "timeout", "memory_limit", "crash", "invalid_output", "not_applicable"}:
         raise BenchmarkDefinitionError(f"unknown adapter failure_status: {status}")
-    if not isinstance(record["evaluations"], int) or record["evaluations"] < 0:
+    if record["evaluations"] is None:
+        if not record.get("evaluation_semantics"):
+            raise BenchmarkDefinitionError("unknown evaluations require evaluation_semantics")
+    elif not isinstance(record["evaluations"], int) or record["evaluations"] < 0:
         raise BenchmarkDefinitionError("adapter result evaluations must be a non-negative integer")
     if status == "not_applicable" and not record.get("failure_reason"):
         raise BenchmarkDefinitionError("not_applicable adapter result requires failure_reason")

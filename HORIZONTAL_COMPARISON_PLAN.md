@@ -84,3 +84,7 @@ Slurm job 名必须包含 `baseline`、method、material/stratum、noise、resou
 ## 9. 进阶 ODEBench 登记
 
 ODEBench 的 63 个系统和 5 个官方轨迹条件另有 `20260926-external-ode-extension-v1` manifest：六个外部方法 × 5 条件 × 2 个 resource tracks × 10 个 seeds，共 37,800 个系统级记录。数组 33901–33906 已提交并保持 `JobHeldUser`；由于六个外部方法的 ODE adapters 尚未通过统一输出契约，释放前只能继续保持 held。这个扩展不与 315 个 tabular 任务的总分混合。
+
+## 10. 可执行外部方法协议修正（2026-09-26）
+
+本轮只执行六个外部方法，不运行 MySR。实际执行以 [EXTERNAL_EXECUTION.md](EXTERNAL_EXECUTION.md) 为准；第 8、9 节的 held 状态是历史登记状态，新的 job ID 由结果仓库部署记录给出。原始 315 题、四个噪声条件、十个正式 seed 均保留；ODE 改为每个 system-condition 一个数组元素。pilot seeds 改为与正式 seed 不重叠。实际运行属于 native-method 配置，不能声称所有方法拥有统一 evaluation 计数或共同搜索空间。ODE 首版评估 held-out 导数预测，不是积分轨迹恢复。

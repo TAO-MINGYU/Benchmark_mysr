@@ -159,9 +159,9 @@ def validate_seed_ledger(ledger: dict[str, Any]) -> None:
         raise BenchmarkDefinitionError("seed ledger requires five unique pilot seeds")
     if not isinstance(formal, list) or len(formal) != 10 or len(set(formal)) != 10:
         raise BenchmarkDefinitionError("seed ledger requires ten unique formal search seeds")
-    if not set(pilot).issubset(formal):
-        raise BenchmarkDefinitionError("pilot seeds must be a subset of formal search seeds")
-    if any(not isinstance(seed, int) or seed < 0 for seed in formal):
+    if set(pilot) & set(formal):
+        raise BenchmarkDefinitionError("pilot seeds must be disjoint from formal search seeds")
+    if any(not isinstance(seed, int) or seed < 0 for seed in pilot + formal):
         raise BenchmarkDefinitionError("search seeds must be non-negative integers")
     if ledger["deterministic_repeats"] != 2:
         raise BenchmarkDefinitionError("deterministic repeat count must be two")

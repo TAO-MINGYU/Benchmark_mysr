@@ -1,8 +1,25 @@
 {
   "schema_version": "seed-ledger-v1",
   "seed_policy": "fixed labels are shared by methods; streams are independent by role",
-  "pilot_seeds": [23654, 15795, 860, 5390, 16850],
-  "formal_search_seeds": [23654, 15795, 860, 5390, 16850, 29910, 4426, 21962, 14423, 28020],
+  "pilot_seeds": [
+    104729,
+    130363,
+    155921,
+    196613,
+    262147
+  ],
+  "formal_search_seeds": [
+    23654,
+    15795,
+    860,
+    5390,
+    16850,
+    29910,
+    4426,
+    21962,
+    14423,
+    28020
+  ],
   "deterministic_repeats": 2,
   "streams": {
     "dataset": "dataset seed is recorded per task and never reused as search state",
@@ -14,6 +31,17 @@
   "statistics": {
     "primary_unit": "formula_family",
     "per_seed_results_required": true,
-    "report": ["median", "mean", "quantiles", "recovery_rate", "timeout_rate", "invalid_rate", "seed_sensitivity", "paired_method_difference", "family_level_confidence_interval"]
-  }
+    "report": [
+      "median",
+      "mean",
+      "quantiles",
+      "recovery_rate",
+      "timeout_rate",
+      "invalid_rate",
+      "seed_sensitivity",
+      "paired_method_difference",
+      "family_level_confidence_interval"
+    ]
+  },
+  "pilot_seed_amendment": "2026-09-26: previous pilot labels overlapped formal seeds; retain old pilot artifacts but use disjoint seeds for adapter validation and calibration."
 }

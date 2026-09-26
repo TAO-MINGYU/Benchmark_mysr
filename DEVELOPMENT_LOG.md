@@ -16,3 +16,17 @@
   systems. No external
   solver campaign or MySR result is claimed; raw third-party data remains
   outside this repository pending provenance and license review.
+
+## 2026-09-26 — Execute external solver work units
+
+- Replaced placeholder design with six real isolated solver adapters, train-only
+  fits, validation selection, retained native candidates and held-out scoring.
+- Added process-group time/RSS supervision, separate startup/search/scoring
+  stages, resumable immutable requests and AI-Feynman Pareto timeout recovery.
+- Added trajectory-separated finite-difference ODE extension, component budget
+  shares, verified node-local runtime staging, and Slurm validation launchers.
+- Fixed the seed validator's erroneous requirement that pilot seeds overlap
+  formal seeds; the formal ledger is unchanged and new pilot seeds are disjoint.
+- Documented native evaluation/complexity differences, DSR compatibility fixes,
+  TF4SR applicability/pretraining limits and uncomputed symbolic/rollout metrics.
+- Validation and deployed job IDs are recorded in the external deployment audit.
