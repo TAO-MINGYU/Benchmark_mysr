@@ -66,13 +66,16 @@ def main():
             details = {'frontier_kind': 'root_native_pareto_checkpoint_at_timeout',
                        'evaluation_count': None, 'evaluation_semantics': 'not_exposed'}
             search_time = 0.0
+            startup_time = time.monotonic()-started
         else:
             api = prepare(request['method'], request['source_root'])
-            dump('stage.json', {'stage': 'search', 'time': time.time(), 'startup_seconds': time.monotonic()-started})
+            startup_time = time.monotonic()-started
+            dump('stage.json', {'stage': 'search', 'time': time.time(), 'startup_seconds': startup_time})
             search_start = time.monotonic()
             candidates, details = fit(request['method'], api, train[0], train[1], request)
             search_time = time.monotonic() - search_start
         dump('stage.json', {'stage': 'scoring', 'time': time.time(), 'search_seconds': search_time})
+        scoring_started = time.monotonic()
         # Select using validation only. No test data is loaded until selection is frozen.
         frontier, best, best_key = [], None, None
         for index, (expression, complexity, predict) in enumerate(candidates):
@@ -104,7 +107,8 @@ def main():
                   'test_score': selected['test_score'], 'test_clean_score': selected['test_clean_score'],
                   'full_frontier': 'frontier.json', 'frontier_count': len(frontier),
                   'frontier_sha256': hashlib.sha256(Path('frontier.json').read_bytes()).hexdigest(),
-                  'search_seconds': search_time, 'details': details,
+                  'search_seconds': search_time, 'startup_seconds': startup_time,
+                  'scoring_seconds': time.monotonic()-scoring_started, 'details': details,
                   'recovery_status': 'not_scored_symbolically',
                   'cpu_affinity': sorted(os.sched_getaffinity(0)),
                   'test_numeric_agreement': bool(np.allclose(prediction, test[2], rtol=1e-6, atol=1e-8)) if request.get('ground_truth_available') else None}

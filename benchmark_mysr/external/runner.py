@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import os
+import resource
 import signal
 import shutil
 import tempfile
@@ -76,6 +77,7 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
         python, env = environment(request['method'], env_root, code_root)
         env['MPLCONFIGDIR'] = str(working / 'mpl-cache')
         begun, peak, cpu, timed_stage = time.monotonic(), 0, 0.0, None
+        usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
         with (output/'stdout.log').open('w') as stdout, (output/'stderr.log').open('w') as stderr:
             proc = subprocess.Popen([str(python), '-m', 'benchmark_mysr.external.worker', str(output/'request.json')],
                                     cwd=working, env=env, stdout=stdout, stderr=stderr, start_new_session=True)
@@ -87,7 +89,8 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
                 if stage_file.exists():
                     info = json.loads(stage_file.read_text())
                     if info['stage'] != stage:
-                        stage, stage_start, stage_info = info['stage'], time.monotonic(), info
+                        stage, stage_start = info['stage'], time.monotonic()
+                        stage_info.update(info)
                 processes = []
                 try:
                     processes = [watch] + watch.children(recursive=True)
@@ -120,6 +123,8 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
                 os.killpg(proc.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+        usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
+        cpu_accounted = (usage_after.ru_utime + usage_after.ru_stime - usage_before.ru_utime - usage_before.ru_stime)
         shutil.copytree(working, output, dirs_exist_ok=True)
         payload_path = output/'worker-result.json'
         result = json.loads(payload_path.read_text()) if payload_path.exists() else {}
@@ -130,8 +135,8 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
                       variant=request.get('variant'), resource_track=request.get('resource_track'),
                       budget=request['budget'], data_hashes=request['data_hashes'], adapter_hashes=request['adapter_hashes'],
                       hostname=socket.gethostname(), slurm_job_id=os.environ.get('SLURM_JOB_ID'),
-                      elapsed_seconds=time.monotonic()-begun, peak_memory_bytes=peak, cpu_seconds_sampled=cpu,
-                      resource_measurement='process_tree_rss_and_cpu_sampled_200ms_no_slurm_memory_claim',
+                      elapsed_seconds=time.monotonic()-begun, peak_memory_bytes=peak, cpu_seconds_sampled=cpu, cpu_seconds_accounted=cpu_accounted,
+                      resource_measurement='waited_child_cpu_accounting_and_process_tree_rss_sampled_200ms_no_slurm_memory_claim',
                       stage=stage_info, formal_claim=False,
                       evidence_scope='registered_external_native_solver_run_pending_campaign_audit')
         checkpoint = output/'native-frontier.json'
@@ -147,15 +152,17 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
                 result['full_frontier'] = 'recovery/frontier.json'
             result['peak_memory_bytes'] = max(peak, recovered['peak_memory_bytes'])
             result['cpu_seconds_sampled'] += recovered['cpu_seconds_sampled']
+            result['cpu_seconds_accounted'] += recovered['cpu_seconds_accounted']
         for key in ('selected_expression','train_score','validation_score','test_score','complexity'):
             result.setdefault(key, None)
         result.setdefault('full_frontier', [])
         result['elapsed_seconds'] = time.monotonic()-begun
         result.update(method_id=request['method'], runtime=result['elapsed_seconds'],
-                      cpu_time=result['cpu_seconds_sampled'], peak_memory=result['peak_memory_bytes'],
+                      cpu_time=result['cpu_seconds_accounted'], peak_memory=result['peak_memory_bytes'],
                       evaluations=result.get('details',{}).get('evaluation_count'),
                       evaluation_semantics=result.get('details',{}).get('evaluation_semantics','not_observed'),
                       environment_prefix=str(python.parent.parent), source_root=request.get('source_root'))
+        result.setdefault('startup_seconds', stage_info.get('startup_seconds'))
         detail = result.get('failure_status')
         status = result['status']
         result['failure_status'] = ('timeout' if status.endswith('_timeout') else

@@ -34,8 +34,8 @@ checkpointed and can be scored after a search timeout without continuing search.
 A process-group supervisor separates startup (300 seconds), search and scoring
 (180 seconds), with 200 ms RSS/CPU sampling. Search termination has a two-second
 grace for final native output. Startup/scoring overhead is reported separately
-and remains included in total runtime. CPU measurements are sampled lower bounds;
-RSS limits are sampled enforcement, not kernel cgroup guarantees. Slurm's incorrect
+and remains included in total runtime. CPU time uses waited-child resource accounting (reaped descendant work included),
+with sampled process CPU also retained as a diagnostic lower bound. RSS limits are sampled enforcement, not kernel cgroup guarantees. Slurm's incorrect
 `RealMemory=1 MiB` configuration still prevents a scheduler memory-efficiency claim.
 Native solver temporary files are written in a private node-local run directory,
 then copied to the durable run archive after the worker exits. Jobs use one CPU with `srun --cpu-bind=cores` and one numerical-library thread.
