@@ -51,3 +51,11 @@
 - A live I/O probe measured 10.86 seconds to create four shared log files. Moved
   pool bookkeeping to retained local files with asynchronous status/event mirrors
   and completed-console-log publication, keeping solver result storage unchanged.
+
+## 2026-09-28 — b3 after b1 failure audit
+
+- Parameterized the full-node pool's CPU allocation so continuation can use all
+  currently available logical CPUs without waiting for unrelated node work.
+- b3 reuses b1 successes and protocol-defined outcomes, retries only missing
+  workunits plus startup/scoring timeout records, and leaves explicit search/
+  evaluation/memory outcomes and algorithmic failures for audit.

@@ -153,3 +153,17 @@ are copied on completion. The allocation record gives the retained local log
 path for interruption recovery. This prevents slow NFS file creation from
 serializing worker admission. Native per-run evidence stays at its original
 durable output paths; the asynchronous files are scheduling diagnostics only.
+
+## b3 continuation after b1 audit (2026-09-28)
+
+b3 replays the complete registered workunit list against the b1 output roots.
+Successful records and protocol-defined outcomes are reused; missing workunits
+and startup/scoring timeout records are retried. The latter are infrastructure
+recovery cases, not unlimited benchmark searches. Search/evaluation/RSS budgets
+remain those of the registered track. Solver errors, invalid outputs,
+incomplete systems and not-applicable records remain visible for diagnosis.
+
+The pool script accepts a Slurm CPU allocation override. b3 uses 448 logical
+CPUs on node1 because an unrelated 64-CPU job occupies that node, and 512 on
+node2. Both jobs have no scheduler time or memory limit. This capacity choice
+does not alter any per-run scientific request or selection rule.

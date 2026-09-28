@@ -9,6 +9,7 @@ set -euo pipefail
 : "${POOL_CONFIG:?immutable deployment configuration}"
 : "${POOL_NODE:?registered node}"
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 JULIA_NUM_THREADS=1
-exec srun --ntasks=1 --cpus-per-task=512 --cpu-bind=threads \
+exec srun --ntasks=1 --cpus-per-task="${SLURM_CPUS_PER_TASK}" --cpu-bind=threads \
   /usr/bin/python3 "$POOL_CODE/scripts/external/node_pool.py" \
-  --config "$POOL_CONFIG" --node "$POOL_NODE" --workers 512
+  --config "$POOL_CONFIG" --node "$POOL_NODE" \
+  --workers "${POOL_WORKERS:-${SLURM_CPUS_PER_TASK}}"
