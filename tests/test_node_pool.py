@@ -23,6 +23,30 @@ def test_pool_command_preserves_campaign_identity_and_pins_one_cpu():
     assert cmd[-1] == '--ode'
 
 
+def test_pool_command_carries_only_explicit_retry_categories():
+    entry = dict(method='gplearn', kind='tabular', manifest='/m', index=0, output='/o')
+    cmd = pool.command(entry, dict(supervisor_python='/p', archive='/a',
+                                   retry_statuses=['startup_timeout']), 1, '/e', '/s')
+    assert cmd[-2:] == ['--retry-status', 'startup_timeout']
+
+
+def test_stale_lock_cleanup_keeps_completed_results(tmp_path):
+    import os
+    import time
+    unfinished = tmp_path/'unfinished'; unfinished.mkdir()
+    complete = tmp_path/'complete'; complete.mkdir()
+    (unfinished/'running.lock').write_text('')
+    (complete/'running.lock').write_text('')
+    (complete/'result.json').write_text('{}')
+    old = time.time() - 1000
+    os.utime(unfinished/'running.lock', (old, old))
+    os.utime(complete/'running.lock', (old, old))
+    removed = pool.clear_stale_locks([tmp_path])
+    assert str(unfinished/'running.lock') in removed
+    assert not (unfinished/'running.lock').exists()
+    assert (complete/'running.lock').exists()
+
+
 def test_pool_executes_each_workunit_once_on_distinct_logical_cpus(tmp_path):
     import json
     import os

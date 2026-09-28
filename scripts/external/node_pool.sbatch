@@ -4,7 +4,6 @@
 #SBATCH --cpus-per-task=512
 #SBATCH --threads-per-core=2
 #SBATCH --mem=0
-#SBATCH --time=2-00:00:00
 set -euo pipefail
 : "${POOL_CODE:?frozen scheduling code}"
 : "${POOL_CONFIG:?immutable deployment configuration}"

@@ -44,7 +44,22 @@ def environment(method, env_root, code_root):
     return prefix / 'bin/python', env
 
 
-def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
+def _request_hash(request):
+    identity = {k: v for k, v in request.items()
+                if k not in {'continuation', 'retry_statuses'}}
+    return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def _archive_retry_attempt(output):
+    attempts = output / 'attempts'
+    attempt = attempts / f"retry-{int(time.time() * 1000)}"
+    attempt.mkdir(parents=True, exist_ok=False)
+    for item in list(output.iterdir()):
+        if item.name != 'attempts':
+            shutil.move(str(item), attempt / item.name)
+
+
+def run(request, output, env_root, startup_seconds=None, scoring_seconds=None):
     import psutil
     output = Path(output).resolve()
     request = dict(request)
@@ -57,14 +72,17 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
         if checksums and checksums != request['data_hashes']:
             raise ValueError('Input split checksums differ from the materialized manifest')
     request['adapter_hashes'] = {p.name: digest(p) for p in Path(__file__).parent.glob('*.py')}
-    request_hash = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()
+    request_hash = _request_hash(request)
     output.mkdir(parents=True, exist_ok=True)
     final = output / 'result.json'
     if final.exists():
         prior = json.loads(final.read_text())
-        if prior['request_sha256'] != request_hash:
+        if prior.get('status') in set(request.get('retry_statuses', [])):
+            _archive_retry_attempt(output)
+        elif prior['request_sha256'] != request_hash:
             raise ValueError(f'Refusing to reuse changed request at {output}')
-        return prior
+        else:
+            return prior
     # Prevent concurrent jobs writing the same run.
     lock = output / 'running.lock'
     fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -108,7 +126,7 @@ def run(request, output, env_root, startup_seconds=300, scoring_seconds=180):
                 limit = {'startup': startup_seconds, 'search': request['budget']['search_seconds'], 'scoring': scoring_seconds}[stage]
                 if rss > request['budget']['memory_gib'] * 1024**3:
                     timed_stage = 'memory_limit'
-                elif time.monotonic()-stage_start > limit + (2 if stage=='search' else 0):
+                elif limit is not None and time.monotonic()-stage_start > limit + (2 if stage=='search' else 0):
                     timed_stage = stage + '_timeout'
                 if timed_stage:
                     try:

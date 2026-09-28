@@ -20,7 +20,8 @@ def input_units(archive, task):
     return []
 
 
-def workunit(manifest, method, index, output, archive, sources, env_root, ode=False):
+def workunit(manifest, method, index, output, archive, sources, env_root, ode=False,
+             retry_statuses=()):
     units=[u for u in manifest['workunits'] if u['method_id']==method]
     item=units[index]
     root=Path(output)/method
@@ -44,6 +45,7 @@ def workunit(manifest, method, index, output, archive, sources, env_root, ode=Fa
                 budget=dict(BUDGETS[track])
                 request={'method':method,'task_id':task,'seed':seed,'variant':variant,'resource_track':track,
                          'budget':budget,'source_root':str(sources),'ground_truth_available':item.get('ground_truth_available',True)}
+                request['retry_statuses'] = list(retry_statuses)
                 if ode:
                     components=[]
                     # A system-level budget is divided equally between its components.
@@ -94,8 +96,10 @@ def main():
     p.add_argument('--sources',type=Path,required=True)
     p.add_argument('--env-root',type=Path,required=True)
     p.add_argument('--ode',action='store_true')
+    p.add_argument('--retry-status', action='append', default=[])
     a=p.parse_args()
-    workunit(json.loads(a.manifest.read_text()),a.method,a.index,a.output_root,a.archive,a.sources,a.env_root,a.ode)
+    workunit(json.loads(a.manifest.read_text()),a.method,a.index,a.output_root,a.archive,a.sources,a.env_root,a.ode,
+             a.retry_status)
 
 
 if __name__=='__main__':

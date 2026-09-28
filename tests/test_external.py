@@ -96,6 +96,28 @@ def test_supervisor_kills_timed_out_worker_and_resumes(tmp_path, monkeypatch):
         runner.run(req,tmp_path/'out',tmp_path)
 
 
+def test_non_protocol_startup_and_scoring_limits_are_unbounded_by_default():
+    import inspect
+    import benchmark_mysr.external.runner as runner
+    sig = inspect.signature(runner.run)
+    assert sig.parameters['startup_seconds'].default is None
+    assert sig.parameters['scoring_seconds'].default is None
+
+
+def test_retryable_result_is_archived_before_reexecution(tmp_path):
+    import json
+    from benchmark_mysr.external.runner import _request_hash
+    from benchmark_mysr.external.runner import _archive_retry_attempt
+    out = tmp_path/'run'; out.mkdir()
+    (out/'result.json').write_text(json.dumps({'status':'startup_timeout'}))
+    (out/'stderr.log').write_text('old')
+    _archive_retry_attempt(out)
+    attempts = list((out/'attempts').iterdir())
+    assert len(attempts) == 1
+    assert (attempts[0]/'result.json').exists()
+    assert not (out/'result.json').exists()
+
+
 def test_seed_streams_are_disjoint():
     p=Path(__file__).resolve().parents[1]/'manifests/formal/seed-ledger-v1.json'
     d=json.loads(p.read_text())

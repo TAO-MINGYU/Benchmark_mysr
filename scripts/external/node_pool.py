@@ -33,6 +33,19 @@ def available_memory_gib():
     return int(fields['MemAvailable'].split()[0]) / 1024**2
 
 
+def clear_stale_locks(roots, minimum_age_seconds=600):
+    removed = []
+    now = time.time()
+    for root in roots:
+        for lock in Path(root).rglob('running.lock'):
+            if now - lock.stat().st_mtime < minimum_age_seconds:
+                continue
+            if not (lock.parent / 'result.json').exists():
+                lock.unlink()
+                removed.append(str(lock))
+    return removed
+
+
 def command(entry, config, cpu, env_root, sources):
     args = ['taskset', '-c', str(cpu), config['supervisor_python'], '-m',
             'benchmark_mysr.external.campaign', '--manifest', entry['manifest'],
@@ -41,6 +54,8 @@ def command(entry, config, cpu, env_root, sources):
             '--sources', str(sources), '--env-root', str(env_root)]
     if entry['kind'] == 'ode':
         args.append('--ode')
+    for status in config.get('retry_statuses', []):
+        args.extend(['--retry-status', status])
     return args
 
 
@@ -61,6 +76,8 @@ def main():
     output = Path(config.get('local_pool_root', f'/tmp/mysr-external-pools-{os.getuid()}')) / os.environ['SLURM_JOB_ID']
     output.mkdir(parents=True, exist_ok=False)
     assigned = [entry for entry in config['campaigns'] if entry['node'] == args.node]
+    stale_locks = (clear_stale_locks(sorted({entry['output'] for entry in assigned}))
+                   if config.get('resume_stale_locks') else [])
     if config.get('supervisor_bundles'):
         stage_script = Path(assigned[0]['code'])/'benchmark_mysr/external/stage.py'
         def stage_extra(name):
@@ -98,6 +115,7 @@ def main():
         'single_thread_per_fit': True, 'resource_epoch': 'full-node-smt-v1',
         'minimum_available_memory_gib': config['minimum_available_memory_gib'],
         'started_at': time.time(), 'node_local_logs': str(output),
+        'stale_locks_removed': stale_locks,
     })
     shutil.copy2(output/'allocation.json', remote/'allocation.json')
     publisher = ThreadPoolExecutor(max_workers=1)
