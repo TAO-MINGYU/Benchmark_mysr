@@ -118,6 +118,27 @@ def test_retryable_result_is_archived_before_reexecution(tmp_path):
     assert not (out/'result.json').exists()
 
 
+def test_continuation_ignores_adapter_hash_revision_but_keeps_request_identity(tmp_path):
+    from benchmark_mysr.external.runner import _prior_request_matches
+
+    prior = {
+        'method': 'gplearn', 'task_id': 'task', 'seed': 7,
+        'variant': 'clean', 'resource_track': 'constrained_resource',
+        'budget': {'evaluations': 20_000, 'search_seconds': 120, 'memory_gib': 8},
+        'data': '/data/task',
+        'data_hashes': {'train': 'a', 'validation': 'b', 'test': 'c'},
+        'source_root': '/data/sources',
+        'adapter_hashes': {'runner.py': 'old'},
+    }
+    output = tmp_path / 'run'
+    output.mkdir()
+    (output / 'request.json').write_text(json.dumps(prior))
+    current = dict(prior, adapter_hashes={'runner.py': 'new'},
+                   retry_statuses=['startup_timeout'])
+    assert _prior_request_matches(output, current)
+    assert not _prior_request_matches(output, dict(current, seed=8))
+
+
 def test_seed_streams_are_disjoint():
     p=Path(__file__).resolve().parents[1]/'manifests/formal/seed-ledger-v1.json'
     d=json.loads(p.read_text())

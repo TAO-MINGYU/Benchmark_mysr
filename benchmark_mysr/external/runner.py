@@ -44,10 +44,33 @@ def environment(method, env_root, code_root):
     return prefix / 'bin/python', env
 
 
+_REQUEST_METADATA = {'adapter_hashes', 'continuation', 'retry_statuses'}
+
+
+def _request_identity(request):
+    """Return the scientific request fields used for continuation matching.
+
+    Adapter hashes describe the executable that produced an attempt.  They
+    must be retained in the evidence, but changing them for a continuation
+    must not make an otherwise identical data/seed/budget request unusable.
+    """
+    return {k: v for k, v in request.items() if k not in _REQUEST_METADATA}
+
+
 def _request_hash(request):
-    identity = {k: v for k, v in request.items()
-                if k not in {'continuation', 'retry_statuses'}}
+    identity = _request_identity(request)
     return hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+
+
+def _prior_request_matches(output, request):
+    prior_path = Path(output) / 'request.json'
+    if not prior_path.exists():
+        return False
+    try:
+        prior = json.loads(prior_path.read_text())
+    except (OSError, ValueError):
+        return False
+    return _request_identity(prior) == _request_identity(request)
 
 
 def _archive_retry_attempt(output):
@@ -78,8 +101,10 @@ def run(request, output, env_root, startup_seconds=None, scoring_seconds=None):
     if final.exists():
         prior = json.loads(final.read_text())
         if prior.get('status') in set(request.get('retry_statuses', [])):
+            if not _prior_request_matches(output, request):
+                raise ValueError(f'Refusing to retry changed request at {output}')
             _archive_retry_attempt(output)
-        elif prior['request_sha256'] != request_hash:
+        elif prior.get('request_sha256') != request_hash and not _prior_request_matches(output, request):
             raise ValueError(f'Refusing to reuse changed request at {output}')
         else:
             return prior
