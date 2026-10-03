@@ -31,8 +31,11 @@ def environment(method, env_root, code_root):
     for name in ('OMP_NUM_THREADS','OPENBLAS_NUM_THREADS','MKL_NUM_THREADS','JULIA_NUM_THREADS',
                  'NUMEXPR_NUM_THREADS','PYTHON_JULIACALL_THREADS'):
         env[name] = '1'
-    env.update(PYTHONPATH=str(code_root), PYTHONHASHSEED='0', CUDA_VISIBLE_DEVICES='',
-               MPLCONFIGDIR=str(Path.cwd() / 'mpl-cache'))
+    # The per-run scratch directory is assigned below, immediately before
+    # launching the worker.  Do not call Path.cwd() here: a long-lived
+    # campaign process can retain a deleted cwd after an external cleanup,
+    # which makes os.getcwd() raise FileNotFoundError before the solver starts.
+    env.update(PYTHONPATH=str(code_root), PYTHONHASHSEED='0', CUDA_VISIBLE_DEVICES='')
     env['PATH'] = str(prefix / 'bin') + os.pathsep + env.get('PATH','')
     if method == 'pysr':
         for k in ('PYTHON_JULIAPKG_EXE', 'PYTHON_JULIACALL_EXE'):

@@ -49,6 +49,18 @@ def test_environment_threads_and_pysr_project(tmp_path):
     assert env['PYTHON_JULIACALL_PROJECT'].startswith(str(tmp_path))
 
 
+def test_environment_does_not_require_a_live_current_directory(tmp_path, monkeypatch):
+    import benchmark_mysr.external.runner as runner
+
+    def deleted_cwd():
+        raise FileNotFoundError('current directory was removed')
+
+    monkeypatch.setattr(runner.Path, 'cwd', deleted_cwd)
+    _, env = runner.environment('gplearn', tmp_path, tmp_path/'code')
+    assert env['CUDA_VISIBLE_DEVICES'] == ''
+    assert 'MPLCONFIGDIR' not in env
+
+
 def test_worker_selects_validation_before_loading_test(tmp_path, monkeypatch):
     import sys
     import benchmark_mysr.external.worker as worker
