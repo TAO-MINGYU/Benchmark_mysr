@@ -5,7 +5,7 @@ MySR/MySRCore formal symbolic-regression benchmark. The previous development and
 PySR-shortcoming suites are no longer active benchmark inputs.
 
 The external corpus is materialized at
-`/home/taomingyu/taomingyu_5/MySR_Benchmark/20260925-formal-corpus-v1` and is
+`/home/taomingyu/taomingyu_5/MySR_Dev/MySR_Benchmark/20260925-formal-corpus-v1` and is
 identified by the manifests and SHA-256 records in that archive. The GitHub
 repository contains the reproducible code, source revisions, schemas, environment
 specifications, run plans, and usage documentation. Large third-party data files
@@ -49,7 +49,7 @@ python -m benchmark_mysr formal-seeds
 python -m benchmark_mysr formal-plan --output /tmp/mysr-formal-run-plan.json
 python -m pytest -q
 python scripts/verify_external_archive.py \
-  --archive /home/taomingyu/taomingyu_5/MySR_Benchmark/20260925-formal-corpus-v1
+  --archive /home/taomingyu/taomingyu_5/MySR_Dev/MySR_Benchmark/20260925-formal-corpus-v1
 ```
 
 No solver result is considered formal until the protocol, task membership, seeds,

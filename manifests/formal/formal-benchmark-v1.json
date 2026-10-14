@@ -150,7 +150,7 @@
     "final_mysr_runs"
   ],
   "publication": {
-    "results_root": "/home/taomingyu/taomingyu_5/MySR_Benchmark/<run-id>",
+    "results_root": "/home/taomingyu/taomingyu_5/MySR_Dev/MySR_Benchmark/<run-id>",
     "github_contents": ["manifest", "source_refs", "generators", "adapters", "environment_locks", "seed_ledger", "metrics_schema", "reproduction_guide"],
     "large_artifacts": "versioned external archive or DOI"
   }

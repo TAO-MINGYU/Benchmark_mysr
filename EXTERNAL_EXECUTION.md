@@ -31,8 +31,9 @@ checkpointed and can be scored after a search timeout without continuing search.
 | constrained_resource | 120 seconds | 20,000 | 8 GiB |
 | capability_ceiling | 900 seconds | 500,000 | 32 GiB |
 
-A process-group supervisor separates startup (300 seconds), search and scoring
-(180 seconds), with 200 ms RSS/CPU sampling. Search termination has a two-second
+A process-group supervisor separates startup, native search and export/scoring,
+with 200 ms RSS/CPU sampling. Startup and scoring have no default time limit;
+only the registered scientific search and RSS budgets are enforced. Search termination has a two-second
 grace for final native output. Startup/scoring overhead is reported separately
 and remains included in total runtime. CPU time uses waited-child resource accounting (reaped descendant work included),
 with sampled process CPU also retained as a diagnostic lower bound. RSS limits are sampled enforcement, not kernel cgroup guarantees. Slurm's incorrect
@@ -167,3 +168,42 @@ The pool script accepts a Slurm CPU allocation override. b3 uses 448 logical
 CPUs on node1 because an unrelated 64-CPU job occupies that node, and 512 on
 node2. Both jobs have no scheduler time or memory limit. This capacity choice
 does not alter any per-run scientific request or selection rule.
+
+## Result repair amendment (2026-10-14)
+
+The completed external matrix retained every outcome. A subsequent quality audit
+found adapter faults in DSR pretty-expression handling, recursive gplearn export,
+TF4SR unit/feature mapping, and PyOperon post-search statistics on overflowing
+models. The repair uses the same frozen inputs, splits, seeds, method parameters
+and scientific budgets. TF4SR units are taken from public variable properties;
+constant entries are excluded and dummy-variable column positions are verified
+against paired train/validation/test input columns without reading equations.
+Affected successful TF4SR results are included, not merely exception records.
+
+Native fitting ends the search clock before expression export/validation/test
+scoring. Invalid native outputs remain explicit outcomes. Export avoids recursive
+gplearn traversal and DSR symbolic simplification; PyOperon invalid Pareto-point
+predictions no longer abort all candidate export. No test information is used to
+select replacement candidates.
+
+DSR and gplearn retain native token/constant checkpoints at completed training
+steps/generations, at most once per ten seconds. Checkpoint overhead is part of
+the search budget. Following a genuine search timeout, checkpoint programs can
+be reconstructed using the same native prediction functions (including protected
+GP operators) and scored with no further search or constant fitting. The recorded
+work count identifies the last checkpoint, not an unobserved final evaluation
+count. Partial timeout outcomes retain their timeout status and provenance.
+
+The rerun uses an explicit per-workunit selection ledger and fresh output roots.
+All applicable primary fits/components lacking a complete scored expression are
+selected, together with TF4SR outputs affected by incorrect angular mapping.
+Previously scored ODE components can be referenced read-only while rebuilding
+only affected components and their aggregate. Original results and attempts are
+retained; an overlay ledger will distinguish baseline and repaired outcomes.
+Data hashes must match the original request before every selected search.
+
+The Slurm allocation is 256 logical CPUs on node2, with no scheduler wall-time or
+memory cap and no automatic same-ID requeue. An interrupted continuation requires
+explicit ownership/result auditing. Execution success and numerical output fields
+do not establish identical cross-method operators/evaluation semantics, symbolic
+recovery, absence of pretrained overlap, or publication-ready scientific rankings.

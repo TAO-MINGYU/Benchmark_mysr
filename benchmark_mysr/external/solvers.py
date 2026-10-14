@@ -12,6 +12,10 @@ class NotApplicable(Exception):
     pass
 
 
+class InvalidOutput(ValueError):
+    """A native solver returned no usable prediction or expression."""
+
+
 def prepare(method, source_root):
     """Import heavyweight libraries before the search clock starts."""
     if method == 'pysr':
@@ -74,6 +78,13 @@ def fit(method, api, X, y, request):
     candidates = []
     details = {'evaluation_count': None, 'evaluation_semantics': 'not_exposed',
                'comparison_track': 'native_default', 'frontier_kind': 'native_exposed_candidates'}
+    search_started = time.monotonic()
+    def search_finished():
+        # Export/validation are scoring work and have no non-protocol time cap.
+        from .worker import dump
+        details['native_search_seconds'] = time.monotonic() - search_started
+        dump('stage.json', {'stage': 'scoring', 'time': time.time(),
+                           'search_seconds': details['native_search_seconds']})
     if method == 'pysr':
         m = api(niterations=1000000, populations=1, population_size=100,
                 max_evals=limit, timeout_in_seconds=seconds, parallelism='serial',
@@ -81,6 +92,7 @@ def fit(method, api, X, y, request):
                 binary_operators=['+', '-', '*', '/'], unary_operators=['sin', 'cos', 'exp', 'log', 'sqrt'],
                 output_directory=str(Path.cwd() / 'pysr-output'))
         m.fit(X, y, variable_names=names)
+        search_finished()
         for idx, row in m.equations_.iterrows():
             candidates.append((str(row['sympy_format']), int(row['complexity']),
                                lambda Z, i=idx: m.predict(Z, index=i)))
@@ -90,7 +102,20 @@ def fit(method, api, X, y, request):
                 max_evaluations=limit, max_time=max(1, int(seconds)), n_threads=1,
                 random_state=seed, objectives=['r2', 'length'],
                 allowed_symbols='add,sub,mul,div,sin,cos,exp,log,sqrt,constant,variable')
-        m.fit(X, y)
+        # PyOperon's post-search Pareto statistics must not discard an entire
+        # front because one native model overflows. Shared scoring rejects it.
+        import pyoperon.sklearn as operon_api
+        original_mse = operon_api.mean_squared_error
+        def finite_mse(y_true, y_pred, *a, **kw):
+            if not np.isfinite(y_pred).all():
+                return float('inf')
+            return original_mse(y_true, y_pred, *a, **kw)
+        operon_api.mean_squared_error = finite_mse
+        try:
+            m.fit(X, y)
+        finally:
+            operon_api.mean_squared_error = original_mse
+        search_finished()
         for row in m.pareto_front_:
             tree = row['tree']
             candidates.append((m.get_model_string(tree, precision=17, names=names), int(row['length']),
@@ -103,7 +128,22 @@ def fit(method, api, X, y, request):
         m = api(population_size=pop, generations=generations, random_state=seed,
                 n_jobs=1, low_memory=False, function_set=('add', 'sub', 'mul', 'div', 'sin', 'cos', 'log', 'sqrt'),
                 feature_names=names)
-        m.fit(X, y)
+        from .checkpoints import NativeCheckpoint
+        import gplearn.genetic as genetic
+        checkpoint = NativeCheckpoint(request)
+        original_evolve = genetic._parallel_evolve
+        def evolve(*a, **kw):
+            population = original_evolve(*a, **kw)
+            retained = [p for g in m._programs for p in (g or []) if p is not None]
+            evaluations = pop * (len(m.run_details_['generation']) + 1)
+            checkpoint.write(retained + population, evaluations)
+            return population
+        genetic._parallel_evolve = evolve
+        try:
+            m.fit(X, y)
+        finally:
+            genetic._parallel_evolve = original_evolve
+        search_finished()
         # gplearn has no HOF: preserve every surviving program exposed by its history.
         programs = {gplearn_expression(p): p for generation in m._programs for p in (generation or []) if p is not None}
         programs[gplearn_expression(m._program)] = m._program
@@ -114,19 +154,25 @@ def fit(method, api, X, y, request):
                        frontier_kind='all_retained_native_programs_no_native_hof')
     elif method == 'dsr':
         from dso.program import Program
-        m = api(config={'task': {'task_type': 'regression', 'function_set': ['add','sub','mul','div','sin','cos','exp','log','const']},
-                        'experiment': {'seed': seed, 'device': 'cpu', 'logdir': None},
-                        'training': {'n_samples': limit, 'batch_size': min(100, limit),
-                                     'n_cores_batch': 1, 'verbose': False},
-                        'gp_meld': {'run_gp_meld': False}})
-        m.fit(X, y)
+        from dso.train import Trainer
+        from .checkpoints import NativeCheckpoint
+        checkpoint = NativeCheckpoint(request)
+        m = api(config=dsr_config(request))
+        original_step = Trainer.run_one_step
+        def step(trainer, *a, **kw):
+            result = original_step(trainer, *a, **kw)
+            checkpoint.write(list(Program.cache.values()), int(trainer.nevals))
+            return result
+        Trainer.run_one_step = step
+        try:
+            m.fit(X, y)
+        finally:
+            Trainer.run_one_step = original_step
+        search_finished()
         for p in list(Program.cache.values()):
             if not p.invalid:
                 # DSO symbols are one-indexed; replace simultaneously.
-                import sympy as sp
-                expr = p.sympy_expr
-                expr = expr.xreplace({s: sp.Symbol(f'x{int(str(s)[1:])-1}') for s in expr.free_symbols if str(s).startswith('x') and str(s)[1:].isdigit()})
-                candidates.append((str(expr), len(p.traversal), p.execute))
+                candidates.append((dsr_expression(p), len(p.traversal), p.execute))
         details.update(evaluation_count=int(m.trainer.nevals), evaluation_semantics='native_sampled_programs',
                        frontier_kind='all_cached_valid_programs', execution_backend='native_python_fallback_when_cyfunc_absent')
     elif method == 'ai_feynman_2':
@@ -156,6 +202,7 @@ def fit(method, api, X, y, request):
         ParetoSet.add = checkpoint_add
         api(str(Path('input').resolve()) + '/', 'train.txt', BF_try_time=min(60, max(1, int(seconds / 10))),
             BF_ops_file_type='14ops.txt', polyfit_deg=3, NN_epochs=100, test_percentage=0)
+        search_finished()
         import sympy as sp
         symbols = sp.symbols(' '.join(names), seq=True)
         paths = list(Path('results').glob('solution*'))
@@ -177,8 +224,51 @@ def fit(method, api, X, y, request):
         candidates, extra = fit_tf4sr(api, X, y, request)
         details.update(extra)
     if not candidates:
-        raise ValueError('Solver returned no exportable candidates')
+        raise InvalidOutput('Solver returned no exportable candidates')
     return candidates, details
+
+
+def dsr_config(request):
+    return {'task': {'task_type': 'regression', 'function_set': ['add','sub','mul','div','sin','cos','exp','log','const']},
+            'experiment': {'seed': request['seed'], 'device': 'cpu', 'logdir': None},
+            'training': {'n_samples': request['budget']['evaluations'],
+                         'batch_size': min(100, request['budget']['evaluations']),
+                         'n_cores_batch': 1, 'verbose': False},
+            'gp_meld': {'run_gp_meld': False}}
+
+
+def dsr_expression(program):
+    if hasattr(program, 'traversal'):
+        # Upstream's pretty printer may return text when SymPy simplification
+        # fails (e.g. an invalid candidate containing log(0)). Export the exact
+        # native tree without simplifying it; shared scoring handles validity.
+        stack = []
+        for token in reversed(program.traversal):
+            if token.arity == 0:
+                if token.input_var is not None:
+                    stack.append(f'x{token.input_var}')
+                else:
+                    stack.append(repr(float(token.value)))
+                continue
+            if len(stack) < token.arity:
+                raise ValueError('Incomplete native DSR traversal')
+            args = [stack.pop() for _ in range(token.arity)]
+            if token.name in ('add', 'sub', 'mul', 'div'):
+                operator = {'add': '+', 'sub': '-', 'mul': '*', 'div': '/'}[token.name]
+                stack.append(f'({args[0]}{operator}{args[1]})')
+            elif token.name in ('sin', 'cos', 'exp', 'log'):
+                stack.append(f'{token.name}({args[0]})')
+            else:
+                raise ValueError(f'Unsupported native DSR token: {token.name}')
+        if len(stack) != 1:
+            raise ValueError('Malformed native DSR traversal')
+        return stack[0]
+    import sympy as sp
+    expr = sp.sympify(program.sympy_expr, evaluate=False)
+    expr = expr.xreplace({s: sp.Symbol(f'x{int(str(s)[1:])-1}')
+                         for s in expr.free_symbols
+                         if str(s).startswith('x') and str(s)[1:].isdigit()})
+    return str(expr)
 
 
 def fit_tf4sr(model, X, y, request):
@@ -197,7 +287,10 @@ def fit_tf4sr(model, X, y, request):
     idx = np.random.choice(np.flatnonzero(valid), 50, replace=False)
     xscale = 10 ** np.mean(np.log10(X[idx]), axis=0)
     # Public unit metadata (no formulas) preserves angular coordinates.
-    for j, unit in enumerate(request.get('input_units', [])):
+    units = request.get('input_units', [])
+    if units and len(units) != X.shape[1]:
+        raise ValueError('TF4SR input units must match the materialized feature columns')
+    for j, unit in enumerate(units):
         if unit == '$rad$':
             xscale[j] = 1.0
     yscale = 10 ** np.mean(np.log10(np.abs(y[idx])))
@@ -215,7 +308,9 @@ def fit_tf4sr(model, X, y, request):
             out[:, i+1] = torch.argmax(model.last_layer(dec)[:, i], axis=-1)
             if is_tree_complete(out[0, 1:]):
                 break
-    expr = from_sequence_to_sympy(translate_integers_into_tokens(out[0]))
+    if not is_tree_complete(out[0, 1:]):
+        raise InvalidOutput('TF4SR returned an incomplete decoded expression')
+    expr = sp.sympify(from_sequence_to_sympy(translate_integers_into_tokens(out[0])))
     substitutions = {}
     constants = []
     for s in expr.free_symbols:
@@ -224,7 +319,7 @@ def fit_tf4sr(model, X, y, request):
         elif str(s).startswith('x') and str(s)[1:].isdigit():
             j = int(str(s)[1:]) - 1
             if j >= X.shape[1]:
-                raise ValueError('TF4SR predicted an absent feature')
+                raise InvalidOutput('TF4SR predicted an absent feature')
             substitutions[s] = sp.Symbol(f'x{j}') / float(xscale[j])
     expr = yscale * expr.xreplace(substitutions)
     symbols = [sp.Symbol(f'x{j}') for j in range(X.shape[1])]
@@ -246,15 +341,32 @@ def fit_tf4sr(model, X, y, request):
 
 
 def gplearn_expression(program):
-    tokens = iter(program.program)
-    def consume():
-        node = next(tokens)
+    # Emit a prefix program in one pass; native trees can exceed Python's
+    # recursion limit. Avoid recursive string construction and quadratic copies.
+    parts, remaining = [], []
+    completed = False
+    for node in program.program:
+        if completed:
+            raise ValueError('Native program has trailing nodes')
         if hasattr(node, 'arity'):
-            return node.name + '(' + ','.join(consume() for _ in range(node.arity)) + ')'
-        if isinstance(node, (int, np.integer)):
-            return f'x{node}'
-        return repr(float(node))
-    return consume()
+            if node.arity <= 0:
+                raise ValueError('Native function has invalid arity')
+            parts.append(node.name + '(')
+            remaining.append(node.arity)
+            continue
+        parts.append(f'x{node}' if isinstance(node, (int, np.integer)) else repr(float(node)))
+        while remaining:
+            remaining[-1] -= 1
+            if remaining[-1]:
+                parts.append(',')
+                break
+            remaining.pop()
+            parts.append(')')
+        else:
+            completed = True
+    if not completed or remaining:
+        raise ValueError('Native program is incomplete')
+    return ''.join(parts)
 
 
 def local_entrypoints(python):

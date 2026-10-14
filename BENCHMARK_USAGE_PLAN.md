@@ -74,19 +74,19 @@ MySR/MySRCore 在所有基线完成并通过代码质量窗口后最后运行。
 题库和生成记录位于：
 
 ```text
-/home/taomingyu/taomingyu_5/MySR_Benchmark/20260925-formal-corpus-v1
+/home/taomingyu/taomingyu_5/MySR_Dev/MySR_Benchmark/20260925-formal-corpus-v1
 ```
 
 横向代码和环境位于：
 
 ```text
-/home/taomingyu/taomingyu_5/parallel_comparsion
+/home/taomingyu/taomingyu_5/MySR_Dev/parallel_comparsion
 ```
 
 横向结果位于：
 
 ```text
-/home/taomingyu/taomingyu_5/parallel_comparsion_result/<run-id>
+/home/taomingyu/taomingyu_5/MySR_Dev/parallel_comparsion_result/<run-id>
 ```
 
 GitHub 保存协议、manifest、源码 revision、环境 lock、adapter 和汇总结果。2.8 GB 的完整第三方数据与原始运行产物使用外部版本化归档；仓库中的 hash 和下载/校验脚本保证可追溯。

@@ -47,7 +47,7 @@ def environment(method, env_root, code_root):
     return prefix / 'bin/python', env
 
 
-_REQUEST_METADATA = {'adapter_hashes', 'continuation', 'retry_statuses'}
+_REQUEST_METADATA = {'adapter_hashes', 'continuation', 'retry_statuses', 'expected_data_hashes'}
 
 
 def _request_identity(request):
@@ -91,6 +91,8 @@ def run(request, output, env_root, startup_seconds=None, scoring_seconds=None):
     request = dict(request)
     request['data'] = str(Path(request['data']).resolve())
     request['data_hashes'] = {split: digest(Path(request['data']) / f'{split}.csv') for split in ('train','validation','test')}
+    if request.get('expected_data_hashes') and request['expected_data_hashes'] != request.get('data_hashes'):
+        raise ValueError('Repair data bytes differ from the original scientific request')
     code_root = Path(__file__).resolve().parents[2]
     metadata_path = Path(request['data'])/'manifest.json'
     if metadata_path.exists():
@@ -186,12 +188,16 @@ def run(request, output, env_root, startup_seconds=None, scoring_seconds=None):
                       stage=stage_info, formal_claim=False,
                       evidence_scope='registered_external_native_solver_run_pending_campaign_audit')
         checkpoint = output/'native-frontier.json'
-        if timed_stage == 'search_timeout' and checkpoint.exists() and not request.get('recover_candidates'):
-            recovery_request = dict(request, recover_candidates=str(checkpoint))
+        native_checkpoint = output/'native-candidates.json'
+        if (timed_stage == 'search_timeout' and (checkpoint.exists() or native_checkpoint.exists())
+                and not (request.get('recover_candidates') or request.get('recover_native_candidates'))):
+            recovery_request = dict(request, **({'recover_native_candidates': str(native_checkpoint)}
+                                               if native_checkpoint.exists() else
+                                               {'recover_candidates': str(checkpoint)}))
             recovered = run(recovery_request, output/'recovery', env_root, startup_seconds, scoring_seconds)
             result['partial_result_status'] = recovered['status']
             result['partial_result'] = 'recovery/result.json'
-            result['native_frontier'] = 'native-frontier.json'
+            result['native_frontier'] = native_checkpoint.name if native_checkpoint.exists() else checkpoint.name
             if recovered['status'] == 'success':
                 for key in ('selected_expression','train_score','validation_score','test_score','test_clean_score','complexity','details'):
                     result[key] = recovered.get(key)

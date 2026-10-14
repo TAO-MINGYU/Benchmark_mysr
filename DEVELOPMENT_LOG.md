@@ -59,3 +59,29 @@
 - b3 reuses b1 successes and protocol-defined outcomes, retries only missing
   workunits plus startup/scoring timeout records, and leaves explicit search/
   evaluation/memory outcomes and algorithmic failures for audit.
+
+## 2026-10-14 — Targeted external result repair
+
+- Preserved the canonical relocation-only changes in the isolated repair worktree.
+- Fixed native expression export (DSR unsimplified tokens and gplearn iterative
+  traversal), public SRSD unit alignment including permuted dummy columns, and
+  invalid PyOperon Pareto prediction statistics. Preserve invalid native outputs
+  and validation-selected expressions even when test prediction fails.
+- Added budget-timeout native token checkpoints/recovery for DSR and gplearn;
+  replay preserves protected prediction semantics and performs no new search.
+- Added selective per-workunit repair manifests, baseline hash guards and frozen
+  data-hash checks; original results are untouched and valid ODE components are
+  referenced read-only in repaired aggregates.
+- Verification: focused deep-tree/type/unit/scoring regressions, full repository
+  tests and node2 original-failure production-command/native-recovery preflight.
+  Exact final counts and job identity will be recorded after verification.
+- Scope: repair/re-execution evidence, not MySR results or cross-method superiority.
+
+- Confirmed validation: full Benchmark suite33 passed in4.93s; compileall and
+  git diff --check passed; all240 SRSD unit mappings verified,24 angular mappings
+  corrected. Four original failure cases passed the actual selective campaign
+  command on node2 with matching original data hashes/seed/budget. DSR/gplearn
+  native checkpoint replay both produced finite scores without additional search.
+- Frozen repair selection:64,019 native fits in1,891 original workunits, covering
+  all six methods. Original outputs remain unchanged; the final run identity and
+  ODE partial-component gate are recorded in the separate repair run archive.

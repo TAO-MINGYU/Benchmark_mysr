@@ -54,6 +54,9 @@ def command(entry, config, cpu, env_root, sources):
             '--sources', str(sources), '--env-root', str(env_root)]
     if entry['kind'] == 'ode':
         args.append('--ode')
+    if config.get('selection_root'):
+        args.extend(['--selection-manifest',str(Path(config['selection_root']) /
+                     f"{entry['kind']}-{entry['method']}-{entry['index']}.json")])
     for status in config.get('retry_statuses', []):
         args.extend(['--retry-status', status])
     return args

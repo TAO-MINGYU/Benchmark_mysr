@@ -46,7 +46,7 @@ Example:
 python -m benchmark_mysr formal-noise \
   --input /path/to/task \
   --spec /path/to/task/spec.json \
-  --output /home/taomingyu/taomingyu_5/MySR_Benchmark/<run-id>/task-001/noise \
+  --output /home/taomingyu/taomingyu_5/MySR_Dev/MySR_Benchmark/<run-id>/task-001/noise \
   --noise-seed 123
 ```
 
@@ -100,7 +100,7 @@ python -m benchmark_mysr formal-seeds
 python -m benchmark_mysr formal-plan --output /tmp/formal-run-plan.json
 python -m pytest -q
 python scripts/verify_external_archive.py \
-  --archive /home/taomingyu/taomingyu_5/MySR_Benchmark/20260925-formal-corpus-v1
+  --archive /home/taomingyu/taomingyu_5/MySR_Dev/MySR_Benchmark/20260925-formal-corpus-v1
 ```
 
 No formal solver campaign is claimed by this repository change. A run release

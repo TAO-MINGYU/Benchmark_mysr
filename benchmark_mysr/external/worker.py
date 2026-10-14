@@ -44,8 +44,9 @@ def score(y, pred):
 
 def main():
     request = json.loads(Path(sys.argv[1]).read_text())
-    from benchmark_mysr.external.solvers import NotApplicable, prepare, fit
+    from benchmark_mysr.external.solvers import NotApplicable, InvalidOutput, prepare, fit
     started = time.monotonic()
+    selected = None
     try:
         if request['method'] == 'tf4sr' and not request.get('task_id', '').startswith('srsd-'):
             raise NotApplicable('TF4SR is registered for compatible SRSD tabular tasks only.')
@@ -53,7 +54,13 @@ def main():
             raise NotApplicable('AI-Feynman is registered for known-expression tasks only.')
         train = read_split(Path(request['data']) / 'train.csv')
         val = read_split(Path(request['data']) / 'validation.csv')
-        if request.get('recover_candidates'):
+        if request.get('recover_native_candidates'):
+            from .checkpoints import recover
+            api = prepare(request['method'], request['source_root'])
+            candidates, details = recover(request, api, train[0], train[1])
+            search_time = 0.0
+            startup_time = time.monotonic()-started
+        elif request.get('recover_candidates'):
             import sympy as sp
             symbols = [sp.Symbol(f'x{j}') for j in range(train[0].shape[1])]
             candidates = []
@@ -76,7 +83,7 @@ def main():
             dump('stage.json', {'stage': 'search', 'time': time.time(), 'startup_seconds': startup_time})
             search_start = time.monotonic()
             candidates, details = fit(request['method'], api, train[0], train[1], request)
-            search_time = time.monotonic() - search_start
+            search_time = details.pop('native_search_seconds', time.monotonic() - search_start)
         dump('stage.json', {'stage': 'scoring', 'time': time.time(), 'search_seconds': search_time})
         scoring_started = time.monotonic()
         # Select using validation only. No test data is loaded until selection is frozen.
@@ -95,7 +102,7 @@ def main():
             frontier.append(row)
         dump('frontier.json', frontier)
         if best is None:
-            raise ValueError('No candidate has finite train and validation predictions')
+            raise InvalidOutput('No candidate has finite train and validation predictions')
         selected = dict(frontier[best])
         test = read_split(Path(request['data']) / 'test.csv')
         predict = candidates[best][2]
@@ -120,7 +127,16 @@ def main():
         dump('worker-result.json', {'status': 'not_applicable', 'failure_status': 'not_applicable', 'reason': str(exc)})
     except Exception as exc:
         traceback.print_exc()
-        dump('worker-result.json', {'status': 'solver_error', 'failure_status': type(exc).__name__, 'reason': str(exc)})
+        invalid_model = isinstance(exc, InvalidOutput) or str(exc) == 'Nonfinite predictions/score'
+        result = {'status': 'invalid_output' if invalid_model else 'solver_error',
+                  'failure_status': type(exc).__name__, 'reason': str(exc),
+                  'failure_class': 'invalid_native_model_output' if invalid_model else 'requires_failure_cause_review'}
+        if Path('frontier.json').exists():
+            result['full_frontier'] = 'frontier.json'
+        if selected is not None:
+            for key in ('expression', 'complexity', 'train_score', 'validation_score'):
+                result['selected_expression' if key == 'expression' else key] = selected[key]
+        dump('worker-result.json', result)
         return 1
     return 0
 
