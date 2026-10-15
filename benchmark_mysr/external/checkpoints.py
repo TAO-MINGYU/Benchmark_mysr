@@ -4,10 +4,48 @@ Snapshots contain native tokens and constants, never a newly searched model.
 Recovery uses the same native prediction functions, including protected GP ops.
 """
 import math
+import csv
 import time
 from pathlib import Path
 
 import numpy as np
+
+
+def pysr_checkpoint(output):
+    """Find the actual search HOF, excluding the synthetic compilation warmup."""
+    directories = sorted(p for p in (Path(output) / 'pysr-output').glob('*') if p.is_dir())
+    if len(directories) != 1:
+        return None
+    for name in ('hall_of_fame.csv', 'hall_of_fame.csv.bak'):
+        path = directories[0] / name
+        try:
+            with path.open() as stream:
+                rows = list(csv.DictReader(stream))
+            if rows and all(row.get('Equation') and int(row['Complexity']) > 0 for row in rows):
+                return path
+        except (OSError, ValueError, TypeError, KeyError):
+            continue
+    return None
+
+
+def recover_pysr(path, n_features):
+    """Use native PySR exporters on a completed CSV snapshot, with no search."""
+    from pysr.export_sympy import pysr2sympy
+    from pysr.export_numpy import sympy2numpy
+    import sympy as sp
+    names = [f'x{i}' for i in range(n_features)]
+    symbols = [sp.Symbol(name) for name in names]
+    with Path(path).open() as stream:
+        rows = list(csv.DictReader(stream))
+    candidates = []
+    for row in rows:
+        expr = pysr2sympy(row['Equation'], feature_names_in=names)
+        if expr.free_symbols - set(symbols):
+            raise ValueError('PySR checkpoint contains an absent feature')
+        candidates.append((str(expr), int(row['Complexity']), sympy2numpy(expr, symbols)))
+    return candidates, {'evaluation_count': None,
+                        'evaluation_semantics': 'native_max_evals_enforced_actual_count_not_exposed',
+                        'frontier_kind': 'native_pysr_csv_at_timeout', 'additional_search': False}
 
 
 class NativeCheckpoint:

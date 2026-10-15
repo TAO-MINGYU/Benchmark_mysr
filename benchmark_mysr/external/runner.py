@@ -189,19 +189,30 @@ def run(request, output, env_root, startup_seconds=None, scoring_seconds=None):
                       evidence_scope='registered_external_native_solver_run_pending_campaign_audit')
         checkpoint = output/'native-frontier.json'
         native_checkpoint = output/'native-candidates.json'
-        if (timed_stage == 'search_timeout' and (checkpoint.exists() or native_checkpoint.exists())
-                and not (request.get('recover_candidates') or request.get('recover_native_candidates'))):
-            recovery_request = dict(request, **({'recover_native_candidates': str(native_checkpoint)}
+        from .checkpoints import pysr_checkpoint
+        pysr_hof = pysr_checkpoint(output) if request['method'] == 'pysr' else None
+        if (timed_stage == 'search_timeout' and (checkpoint.exists() or native_checkpoint.exists() or pysr_hof)
+                and not any(request.get(key) for key in
+                            ('recover_candidates', 'recover_native_candidates', 'recover_pysr_candidates'))):
+            recovery_request = dict(request, **({'recover_pysr_candidates': str(pysr_hof)} if pysr_hof else
+                                               {'recover_native_candidates': str(native_checkpoint)}
                                                if native_checkpoint.exists() else
                                                {'recover_candidates': str(checkpoint)}))
             recovered = run(recovery_request, output/'recovery', env_root, startup_seconds, scoring_seconds)
             result['partial_result_status'] = recovered['status']
             result['partial_result'] = 'recovery/result.json'
-            result['native_frontier'] = native_checkpoint.name if native_checkpoint.exists() else checkpoint.name
-            if recovered['status'] == 'success':
-                for key in ('selected_expression','train_score','validation_score','test_score','test_clean_score','complexity','details'):
-                    result[key] = recovered.get(key)
-                result['full_frontier'] = 'recovery/frontier.json'
+            result['native_frontier'] = str(pysr_hof.relative_to(output)) if pysr_hof else (
+                native_checkpoint.name if native_checkpoint.exists() else checkpoint.name)
+            # Recovery may preserve a real expression whose test-domain output
+            # is invalid. Retain that evidence while keeping the timeout status.
+            for key in ('selected_expression','train_score','validation_score','test_score','test_clean_score',
+                        'complexity','details','frontier_count','frontier_sha256','prediction_failure_stage',
+                        'test_prediction_count','test_prediction_finite_count'):
+                if key in recovered:
+                    result[key] = recovered[key]
+            for key in ('full_frontier', 'test_prediction_artifact'):
+                if isinstance(recovered.get(key), str):
+                    result[key] = 'recovery/' + recovered[key]
             result['peak_memory_bytes'] = max(peak, recovered['peak_memory_bytes'])
             result['cpu_seconds_sampled'] += recovered['cpu_seconds_sampled']
             result['cpu_seconds_accounted'] += recovered['cpu_seconds_accounted']

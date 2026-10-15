@@ -127,3 +127,24 @@
   the original zero-gradient eig exception and passed zero/overflow safeguards
   while preserving ordinary native scoring exactly. Full original failed fits
   remain production reruns, not claimed complete by this contract check.
+
+## 2026-10-15 — Preserve timeout models and invalid held-out predictions
+
+- Recover PySR's actual search hall-of-fame CSV with its native expression and
+  NumPy exporters, excluding synthetic compilation output and additional search.
+- Retain validation-selected expressions, finite training/validation scores and
+  frontier provenance even when a timeout recovery fails held-out prediction.
+  Keep the original timeout and explicit partial-result status.
+- Save actual held-out predictions before finite-score validation, including
+  nonfinite outputs, together with finite/total prediction counts. Keep the
+  validation winner frozen and preserve invalid scientific outcomes.
+- Permit checksum-guarded replay of an existing native checkpoint instead of
+  spending another search budget; retain the original data/seed/budget identity.
+- Validation: complete Benchmark suite40 passed in9.81s, including actual
+  timeout/process supervision, invalid-domain evidence retention and changed
+  checkpoint rejection. Native PySR CSV recovery is checked separately in the
+  B6 run archive. No search, operator, constant-fit or selection changes.
+- Deployment selection:4,546 unresolved B5 fits;394 existing-checkpoint recoveries
+  and4,152 original-budget native reruns, with all prior results retained.
+  This repairs evidence loss; it does not guarantee that an algorithm produces
+  a finite model for every task or establish a complete scientific comparison.

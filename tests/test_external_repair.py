@@ -130,3 +130,62 @@ def test_failed_test_prediction_retains_validation_selected_expression(tmp_path,
     assert result['validation_score']['mse'] == 0
     assert result['full_frontier'] == 'frontier.json'
     assert 'test_score' not in result
+    assert result['test_prediction_count'] == 1
+    assert result['test_prediction_finite_count'] == 0
+    assert np.isinf(np.load(tmp_path/result['test_prediction_artifact'])['prediction']).all()
+    assert result['prediction_failure_stage'] == 'held_out_test'
+
+
+def test_pysr_checkpoint_excludes_warmup_and_uses_backup_only_for_bad_primary(tmp_path):
+    from benchmark_mysr.external.checkpoints import pysr_checkpoint
+    warmup = tmp_path/'pysr-warmup/run'
+    warmup.mkdir(parents=True)
+    (warmup/'hall_of_fame.csv').write_text('Complexity,Loss,Equation\n1,0,999\n')
+    assert pysr_checkpoint(tmp_path) is None
+    native = tmp_path/'pysr-output/run'
+    native.mkdir(parents=True)
+    primary = native/'hall_of_fame.csv'
+    backup = native/'hall_of_fame.csv.bak'
+    primary.write_text('Complexity,Loss,Equation\n3,0,x0 + 2\n')
+    backup.write_text('Complexity,Loss,Equation\n1,1,x0\n')
+    assert pysr_checkpoint(tmp_path) == primary
+    primary.write_text('Complexity,Loss,Equation\n3,0,')
+    assert pysr_checkpoint(tmp_path) == backup
+    (tmp_path/'pysr-output/ambiguous').mkdir()
+    assert pysr_checkpoint(tmp_path) is None
+
+
+def test_timeout_recovery_retains_expression_even_when_test_domain_is_invalid(tmp_path, monkeypatch):
+    import os
+    import sys
+    import benchmark_mysr.external.runner as runner
+    for split in ('train', 'validation', 'test'):
+        (tmp_path/f'{split}.csv').write_text('row_id,x_0,target\na,1,1\n')
+    script = tmp_path/'worker.py'
+    script.write_text('''import json, pathlib, sys, time
+r = json.loads(pathlib.Path(sys.argv[-1]).read_text())
+def dump(name, value):
+    pathlib.Path(name).write_text(json.dumps(value))
+if r.get('recover_candidates'):
+    dump('frontier.json', [{'expression': 'log(x0)', 'status': 'valid'}])
+    dump('worker-result.json', {'status': 'invalid_output', 'failure_status': 'ValueError',
+         'selected_expression': 'log(x0)', 'complexity': 2, 'full_frontier': 'frontier.json',
+         'train_score': {'mse': 0., 'nrmse': 0.}, 'validation_score': {'mse': 0., 'nrmse': 0.}})
+else:
+    dump('stage.json', {'stage': 'search'})
+    dump('native-frontier.json', [{'expression': 'log(x0)'}])
+    time.sleep(30)
+''')
+    launcher = tmp_path/'python'
+    launcher.write_text('#!/bin/sh\nexec '+sys.executable+' '+str(script)+' "$@"\n')
+    launcher.chmod(0o700)
+    monkeypatch.setattr(runner, 'environment', lambda *a: (launcher, dict(os.environ)))
+    request = {'method': 'ai_feynman_2', 'data': str(tmp_path), 'task_id': 'fixture',
+               'seed': 1, 'budget': {'search_seconds': 0, 'memory_gib': 1, 'evaluations': 100}}
+    result = runner.run(request, tmp_path/'out', tmp_path)
+    assert result['status'] == 'search_timeout'
+    assert result['partial_result_status'] == 'invalid_output'
+    assert result['selected_expression'] == 'log(x0)'
+    assert result['validation_score']['mse'] == 0
+    assert result['test_score'] is None
+    assert json.loads((tmp_path/'out'/result['full_frontier']).read_text())[0]['expression'] == 'log(x0)'

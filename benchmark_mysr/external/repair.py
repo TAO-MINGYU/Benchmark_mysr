@@ -29,6 +29,20 @@ def run_selected(entry, output_root, env_root, sources):
         raise ValueError('Primary data hashes differ from frozen selection')
     request['source_root'] = str(sources)
     request['expected_data_hashes'] = entry['data_hashes']
+    recovery = entry.get('recovery')
+    if recovery:
+        if before['status'] != 'search_timeout':
+            raise ValueError('Checkpoint-only correction requires an original search timeout')
+        path = Path(recovery['path'])
+        if digest(path) != recovery['sha256']:
+            raise ValueError('Selected native checkpoint changed before recovery')
+        field = recovery['request_field']
+        allowed = {'dsr': 'recover_native_candidates', 'gplearn': 'recover_native_candidates',
+                   'ai_feynman_2': 'recover_candidates', 'pysr': 'recover_pysr_candidates'}
+        if field != allowed.get(request['method']):
+            raise ValueError('Recovery checkpoint type differs from selected method')
+        request[field] = str(path)
+        request['recovery_input_sha256'] = recovery['sha256']
     relative = Path(entry['relative_output'])
     if relative.is_absolute() or '..' in relative.parts:
         raise ValueError('Correction output must stay inside its dedicated root')
@@ -36,7 +50,18 @@ def run_selected(entry, output_root, env_root, sources):
     output = output_root / relative
     if output.resolve() == primary.parent.resolve():
         raise ValueError('Correction must not overwrite its primary attempt')
-    return run(request, output, env_root)
+    result = run(request, output, env_root)
+    if recovery and result.get('correction_operation') != 'existing_native_checkpoint_recovery':
+        from .worker import dump
+        # A post-budget scoring replay must not relabel its original search
+        # as having finished normally. Its CPU/RSS record measures recovery.
+        result.update(partial_result_status=result['status'], status=before['status'],
+                      failure_status='timeout', primary_result=str(primary),
+                      primary_result_sha256=entry['primary_sha256'],
+                      correction_operation='existing_native_checkpoint_recovery',
+                      resource_scope='checkpoint_scoring_only; original_search_resources_in_primary')
+        dump(output/'result.json', result)
+    return result
 
 
 def main():

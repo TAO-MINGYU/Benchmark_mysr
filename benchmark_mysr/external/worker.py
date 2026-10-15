@@ -54,7 +54,13 @@ def main():
             raise NotApplicable('AI-Feynman is registered for known-expression tasks only.')
         train = read_split(Path(request['data']) / 'train.csv')
         val = read_split(Path(request['data']) / 'validation.csv')
-        if request.get('recover_native_candidates'):
+        if request.get('recover_pysr_candidates'):
+            from .checkpoints import recover_pysr
+            prepare(request['method'], request['source_root'])
+            candidates, details = recover_pysr(request['recover_pysr_candidates'], train[0].shape[1])
+            search_time = 0.0
+            startup_time = time.monotonic()-started
+        elif request.get('recover_native_candidates'):
             from .checkpoints import recover
             api = prepare(request['method'], request['source_root'])
             candidates, details = recover(request, api, train[0], train[1])
@@ -107,9 +113,14 @@ def main():
         test = read_split(Path(request['data']) / 'test.csv')
         predict = candidates[best][2]
         prediction = np.broadcast_to(np.asarray(predict(test[0])).reshape(-1), test[1].shape)
+        # Preserve the actual model output even if held-out scoring rejects it.
+        # Never replace the frozen validation winner after inspecting test data.
+        np.savez_compressed('test-predictions.npz', prediction=prediction)
+        selected['test_prediction_count'] = int(prediction.size)
+        selected['test_prediction_finite_count'] = int(np.isfinite(prediction).sum())
+        selected['test_prediction_artifact'] = 'test-predictions.npz'
         selected['test_score'] = score(test[1], prediction)
         selected['test_clean_score'] = score(test[2], prediction)
-        np.savez_compressed('test-predictions.npz', prediction=prediction)
         result = {'status': 'success', 'failure_status': None,
                   'selected_expression': selected['expression'], 'complexity': selected['complexity'],
                   'complexity_definition': 'native_node_count_or_sympy_ops_plus_one_not_cross_method_identical',
@@ -119,6 +130,7 @@ def main():
                   'frontier_sha256': hashlib.sha256(Path('frontier.json').read_bytes()).hexdigest(),
                   'search_seconds': search_time, 'startup_seconds': startup_time,
                   'scoring_seconds': time.monotonic()-scoring_started, 'details': details,
+                  **{k: selected[k] for k in ('test_prediction_count', 'test_prediction_finite_count', 'test_prediction_artifact')},
                   'recovery_status': 'not_scored_symbolically',
                   'cpu_affinity': sorted(os.sched_getaffinity(0)),
                   'test_numeric_agreement': bool(np.allclose(prediction, test[2], rtol=1e-6, atol=1e-8)) if request.get('ground_truth_available') else None}
@@ -133,9 +145,16 @@ def main():
                   'failure_class': 'invalid_native_model_output' if invalid_model else 'requires_failure_cause_review'}
         if Path('frontier.json').exists():
             result['full_frontier'] = 'frontier.json'
+            result['frontier_count'] = len(frontier)
+            result['frontier_sha256'] = hashlib.sha256(Path('frontier.json').read_bytes()).hexdigest()
+            result['details'] = details
         if selected is not None:
             for key in ('expression', 'complexity', 'train_score', 'validation_score'):
                 result['selected_expression' if key == 'expression' else key] = selected[key]
+            for key in ('test_prediction_count', 'test_prediction_finite_count', 'test_prediction_artifact'):
+                if key in selected:
+                    result[key] = selected[key]
+            result['prediction_failure_stage'] = 'held_out_test'
         dump('worker-result.json', result)
         return 1
     return 0
