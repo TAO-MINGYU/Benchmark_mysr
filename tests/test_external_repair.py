@@ -40,6 +40,20 @@ def test_dsr_export_does_not_simplify_invalid_candidates_or_call_pretty_printer(
     assert dsr_expression(Native()) == 'log(0.0)'
 
 
+def test_constant_fit_penalty_handles_huge_finite_and_nonfinite_residuals():
+    from benchmark_mysr.external.solvers import constant_fit_residual
+    from scipy.optimize import least_squares
+    huge = np.array([1e200, -1e200, np.inf, -np.inf, np.nan, 4.0])
+    r = constant_fit_residual(huge, 2.0)
+    assert r.tolist() == [1e10, -1e10, 1e10, -1e10, 1e10, 2.0]
+    assert np.isfinite(r @ r)
+    # Exercise the real trust-region/SVD path, not just sanitization output.
+    fit = least_squares(lambda c: constant_fit_residual(
+        np.array([1e200 * c[0], -1e200 * c[0], c[0] - 2]), 1.0),
+        np.ones(1), max_nfev=200)
+    assert np.isfinite(fit.x).all() and np.isfinite(fit.fun).all()
+
+
 def test_public_units_skip_constants_and_follow_dummy_column_positions(tmp_path):
     info = {'task': {'properties': ['V, F', 'C, F', 'V, F', 'V, F'],
                      'si-derived_units': ['$J$', '$kg$', '$rad$', '$m$'],

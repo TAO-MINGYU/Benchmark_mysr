@@ -328,7 +328,7 @@ def fit_tf4sr(model, X, y, request):
         def residual(c):
             with np.errstate(all='ignore'):
                 v = np.broadcast_to(f(*X.T, *c), y.shape) - y
-            return np.nan_to_num(v / max(float(np.std(y)), 1e-15), nan=1e10, posinf=1e10, neginf=-1e10)
+            return constant_fit_residual(v, max(float(np.std(y)), 1e-15))
         opt = least_squares(residual, np.ones(len(constants)), max_nfev=200)
         expr = expr.subs(dict(zip(constants, opt.x)))
     f = sp.lambdify(symbols, expr, 'numpy')
@@ -336,8 +336,22 @@ def fit_tf4sr(model, X, y, request):
         'evaluation_count': 1, 'evaluation_semantics': 'one_greedy_decode_plus_train_only_constant_fit',
         'frontier_kind': 'single_native_decoding', 'training_rows_used_for_decode': 50,
         'constant_fit': 'shared_C_train_only_max_nfev_200',
+        'constant_fit_penalty': 'finite_and_nonfinite_residuals_bounded_at_1e10',
         'preprocessing': 'official_log_scale_positive_training_rows; inverse_scale_export',
         'pretraining_overlap': 'not_audited_do_not_claim_unseen_formula_recovery'}
+
+
+def constant_fit_residual(error, scale):
+    """Keep trust-region/Jacobian arithmetic finite for invalid native models.
+
+    The existing nonfinite penalty is also applied to finite residuals that
+    would otherwise overflow squared norms or SVD updates. Ordinary residuals
+    are unchanged; prediction scoring still rejects nonfinite model outputs.
+    """
+    with np.errstate(all='ignore'):
+        residual = np.asarray(error, dtype=np.float64) / scale
+    residual = np.nan_to_num(residual, nan=1e10, posinf=1e10, neginf=-1e10)
+    return np.clip(residual, -1e10, 1e10)
 
 
 def gplearn_expression(program):

@@ -85,3 +85,21 @@
 - Frozen repair selection:64,019 native fits in1,891 original workunits, covering
   all six methods. Original outputs remain unchanged; the final run identity and
   ODE partial-component gate are recorded in the separate repair run archive.
+
+## 2026-10-14 — TF4SR train-only constant-fit overflow repair
+
+- The live selective run exposed scipy trust-region/SVD failures from extremely
+  large finite residuals. Extend the existing `1e10` nonfinite penalty to large
+  finite normalized residuals; preserve smaller residuals and retain the original
+  seeded decoding, train-only optimization and `max_nfev=200`.
+- Exported predictions and shared scores are unchanged by the numerical penalty;
+  invalid predictions and poor finite fits remain explicit measured outcomes.
+- Verification: full Benchmark suite34 passed in5.77s, including the real scipy
+  trust-region regression. The frozen adapter is being checked against all14
+  initially observed original SVD failures with unchanged data/seed/budget:
+  all14 completed successfully; the complete provenance and saved-prediction
+  metric audit also passed all14 with zero issues. The existing256-CPU production
+  job continues under its already frozen source.
+- Corrective results are preserved separately. Their first-attempt selection
+  policy, original-failure hashes and actual resource measurements are explicit;
+  final completeness and scientific-quality claims remain deferred.

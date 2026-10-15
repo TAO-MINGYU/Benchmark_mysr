@@ -207,3 +207,25 @@ memory cap and no automatic same-ID requeue. An interrupted continuation require
 explicit ownership/result auditing. Execution success and numerical output fields
 do not establish identical cross-method operators/evaluation semantics, symbolic
 recovery, absence of pretrained overlap, or publication-ready scientific rankings.
+
+### TF4SR constant-fit numerical safeguard
+
+TF4SR's train-only least-squares fit previously replaced nonfinite normalized
+residuals with a penalty of magnitude `1e10`, but left arbitrarily large finite
+residuals unchanged. Their squared norms and finite-difference Jacobians can
+overflow and abort the trust-region SVD. The same penalty now bounds finite
+residuals outside `[-1e10, 1e10]`; smaller finite residuals are unchanged.
+This bounds the optimization residual, not the exported prediction or its score.
+Nonfinite predictions remain invalid outputs, and large finite prediction errors
+remain large errors in the result. Training-only fitting, the original seeded
+decoding and `max_nfev=200` remain unchanged.
+
+Corrective reruns retain the original data, seeds and scientific budgets, with
+their own executable hashes and output directories. An explicit amendment names
+the first corrected attempt for each affected case irrespective of its outcome;
+the original failure and intermediate attempts remain available. A completed
+native verification attempt may supply that corrective result after provenance
+and saved-prediction checks pass, avoiding a redundant search. Shared diagnostic
+step timings are retained as actual resources and do not establish a matched
+standalone wall-time comparison. Later occurrences require a new amendment and
+the final full-matrix audit remains mandatory.
