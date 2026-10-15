@@ -229,3 +229,34 @@ and saved-prediction checks pass, avoiding a redundant search. Shared diagnostic
 step timings are retained as actual resources and do not establish a matched
 standalone wall-time comparison. Later occurrences require a new amendment and
 the final full-matrix audit remains mandatory.
+
+### Carbon failed-fit replay (2026-10-15)
+
+The authorized carbon rerun uses 500 allocated logical CPUs and an 18-hour Slurm
+limit, with `--mem=0` and no automatic requeue. Original problem-defined search,
+evaluation and memory budgets remain unchanged; startup and scoring have no
+additional per-fit wall-time cap. This is a distinct resource epoch.
+
+The snapshot selects currently completed, applicable b4 native fits that lack
+complete finite-scored expressions or require solver-error repair. The original
+14 validated TF4SR corrections are retained. Missing or still-running fits stay
+with the existing node2 job. Each selected fit has its own immutable shard and
+single-CPU pool slot, including individual ODE components. This permits parallel
+replay across seeds and resource tracks even when few original workunits failed.
+Before execution, original-baseline, primary-result, request and data hashes must
+match the frozen selection. Corrective outputs use a separate root; failures and
+poor scores remain present, with first-attempt selection rather than best retry.
+ODE system aggregates and final overlays require the designated component set
+after both campaigns finish; native component results alone do not prove full
+system completion or publication readiness.
+
+The failure snapshot also exposed AI-Feynman's gradient consistency scoring:
+normalizing zero, nonfinite or very large float32 gradients produced a nonfinite
+matrix and aborted the search despite previously exposed Pareto candidates.
+Regular gradient rows retain the original native scoring function. When native
+row norms are undefined, finite nonzero rows are first scaled by their maximum
+magnitude and normalized in float64; zero/nonfinite rows contribute no consistency
+evidence. The original sample count remains the denominator, and all-invalid
+samples return zero consistency and a zero direction. This is a documented
+numerical adapter safeguard, with its own source epoch and unchanged train data,
+seeds, model training and budgets; it is not a claim that every failed fit solves.

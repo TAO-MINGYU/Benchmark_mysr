@@ -54,6 +54,37 @@ def test_constant_fit_penalty_handles_huge_finite_and_nonfinite_residuals():
     assert np.isfinite(fit.x).all() and np.isfinite(fit.fun).all()
 
 
+def test_gradient_consistency_handles_zero_nonfinite_and_overflow_rows():
+    from benchmark_mysr.external.solvers import stable_gradient_consistency
+
+    class Tensor:
+        def __init__(self, data):
+            self.data = np.asarray(data, dtype=np.float32)
+        def cpu(self):
+            return self
+        def numpy(self):
+            return self.data
+
+    def unsafe_native(tensor):
+        raw = tensor.numpy()
+        with np.errstate(all='ignore'):
+            normalized = raw / np.linalg.norm(raw, axis=1)[:, None]
+        return np.linalg.eig(normalized.T @ normalized)
+
+    zero = Tensor([[0, 0], [0, 0]])
+    with pytest.raises(np.linalg.LinAlgError):
+        unsafe_native(zero)
+    score, direction = stable_gradient_consistency(zero, unsafe_native)
+    assert score == 0 and np.array_equal(direction, [0, 0])
+    mixed = Tensor([[1e30, 1e30], [0, 0], [np.inf, 1], [np.nan, 0]])
+    score, direction = stable_gradient_consistency(mixed, unsafe_native)
+    assert score == pytest.approx(0.25)
+    assert np.isfinite(direction).all()
+    ordinary = Tensor([[1, 0], [0, 1]])
+    sentinel = object()
+    assert stable_gradient_consistency(ordinary, lambda actual: sentinel) is sentinel
+
+
 def test_public_units_skip_constants_and_follow_dummy_column_positions(tmp_path):
     info = {'task': {'properties': ['V, F', 'C, F', 'V, F', 'V, F'],
                      'si-derived_units': ['$J$', '$kg$', '$rad$', '$m$'],

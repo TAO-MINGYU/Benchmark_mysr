@@ -103,3 +103,27 @@
 - Corrective results are preserved separately. Their first-attempt selection
   policy, original-failure hashes and actual resource measurements are explicit;
   final completeness and scientific-quality claims remain deferred.
+
+## 2026-10-15 — Carbon500 single-fit corrective pool
+
+- Added guarded replay of a frozen failed native fit into a fresh result tree.
+  Baseline/result/request SHA checks, identical scientific identity and original
+  data hashes prevent accidental budget/seed changes or primary overwrites.
+- Extended the existing node pool with per-fit dispatch and small immutable
+  selection shards. Each native fit is pinned to one distinct allocated logical
+  CPU; original workunit scheduling remains available unchanged.
+- Authorized deployment: carbon500 logical CPUs,18-hour job time,mem=0,no requeue;
+  original explicit problem budgets retained. Node2 keeps its existing queue.
+- Verification: full Benchmark suite36 passed in7.32s, including the concurrent
+  per-fit pool subprocess integration and changed-evidence rejection. The TF4SR
+  optimizer change retains its14/14 original native-case validation. Runtime
+  allocation, staged hashes and first live results must be checked after launch.
+- The fresh snapshot contains110 AI-Feynman exceptions, all traced to nonfinite
+  gradient-consistency matrices. Preserve regular native scoring and use scaled
+  float64 normalization for degenerate rows, with zero evidence for nonfinite or
+  zero gradients. New regression covers actual eig failure, zero/overflow/NaN
+  inputs and unmodified ordinary scoring. Full suite37 passed in7.86s after this
+  repair. Frozen AI-Feynman NumPy1.26.4/PyTorch2.2.2+cpu validation reproduced
+  the original zero-gradient eig exception and passed zero/overflow safeguards
+  while preserving ordinary native scoring exactly. Full original failed fits
+  remain production reruns, not claimed complete by this contract check.

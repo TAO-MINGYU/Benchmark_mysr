@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run frozen external work units on distinct logical CPUs in one Slurm job."""
 import argparse
-from collections import deque
+from collections import Counter, deque
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
@@ -47,6 +47,12 @@ def clear_stale_locks(roots, minimum_age_seconds=600):
 
 
 def command(entry, config, cpu, env_root, sources):
+    if entry['kind'] == 'fit':
+        return ['taskset', '-c', str(cpu), config['supervisor_python'], '-m',
+                'benchmark_mysr.external.repair', '--selection',
+                str(Path(config['fit_selection_root']) / f"{entry['method']}-{entry['index']}.json"),
+                '--output-root', entry['output'], '--env-root', str(env_root),
+                '--sources', str(sources)]
     args = ['taskset', '-c', str(cpu), config['supervisor_python'], '-m',
             'benchmark_mysr.external.campaign', '--manifest', entry['manifest'],
             '--method', entry['method'], '--index', str(entry['index']),
@@ -108,14 +114,18 @@ def main():
             else:
                 environments[entry['method']] = root
         manifest = json.loads(Path(entry['manifest']).read_text())
-        units = [u for u in manifest['workunits'] if u['method_id'] == entry['method']]
+        if entry['kind'] == 'fit':
+            units = [u for u in manifest['fits'] if u['method'] == entry['method']]
+        else:
+            units = [u for u in manifest['workunits'] if u['method_id'] == entry['method']]
         groups.append([dict(entry, index=i) for i in range(len(units))])
     queue = deque(interleave(groups))
     config_hash = hashlib.sha256(args.config.read_bytes()).hexdigest()
     write_json(output/'allocation.json', {
         'node': args.node, 'job_id': os.environ['SLURM_JOB_ID'], 'cpus': cpus[:args.workers],
         'workers': args.workers, 'config_sha256': config_hash, 'unit_count': len(queue),
-        'single_thread_per_fit': True, 'resource_epoch': 'full-node-smt-v1',
+        'single_thread_per_fit': True,
+        'resource_epoch': config.get('resource_epoch', 'full-node-smt-v1'),
         'minimum_available_memory_gib': config['minimum_available_memory_gib'],
         'started_at': time.time(), 'node_local_logs': str(output),
         'stale_locks_removed': stale_locks,
@@ -134,6 +144,7 @@ def main():
         temp.replace(remote/'events.jsonl')
     free = deque(cpus[:args.workers])
     active, completed, failures = {}, 0, 0
+    fit_statuses = Counter()
     stop = False
 
     def stopping(*unused):
@@ -154,6 +165,14 @@ def main():
                     completed += 1
                     failures += proc.returncode != 0
                     log.close()
+                    if entry['kind'] == 'fit':
+                        try:
+                            with Path(log.name).open('rb') as handle:
+                                handle.seek(max(0, Path(log.name).stat().st_size - 4096))
+                                summary = json.loads(handle.read().splitlines()[-1])
+                            fit_statuses[summary['status']] += 1
+                        except (OSError, ValueError, KeyError, IndexError):
+                            fit_statuses['unavailable'] += 1
                     log_copies.append(log_publisher.submit(shutil.copy2, log.name, remote/Path(log.name).name))
                     del active[cpu]
                     free.append(cpu)
@@ -177,6 +196,7 @@ def main():
                 started += 1
             status = {'time': time.time(), 'active': len(active),
                 'queued': len(queue), 'completed': completed, 'failed_workunits': failures,
+                'fit_status_counts': dict(fit_statuses),
                 'available_memory_gib': memory, 'stopping': stop,
                 'active_workunits': [{'cpu': cpu, 'pid': x[0].pid, 'method': x[1]['method'],
                     'kind': x[1]['kind'], 'index': x[1]['index']} for cpu, x in active.items()]}

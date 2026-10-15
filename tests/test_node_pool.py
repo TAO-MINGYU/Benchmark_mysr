@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import pytest
 
 spec = importlib.util.spec_from_file_location('node_pool', Path(__file__).resolve().parents[1]/'scripts/external/node_pool.py')
 pool = importlib.util.module_from_spec(spec)
@@ -47,7 +48,8 @@ def test_stale_lock_cleanup_keeps_completed_results(tmp_path):
     assert (complete/'running.lock').exists()
 
 
-def test_pool_executes_each_workunit_once_on_distinct_logical_cpus(tmp_path):
+@pytest.mark.parametrize('kind', ['tabular', 'fit'])
+def test_pool_executes_each_workunit_once_on_distinct_logical_cpus(tmp_path, kind):
     import json
     import os
     import socket
@@ -62,26 +64,35 @@ def test_pool_executes_each_workunit_once_on_distinct_logical_cpus(tmp_path):
     (code/'benchmark_mysr/__init__.py').touch()
     (package/'__init__.py').touch()
     (package/'stage.py').write_text('print("/same/staged/root")\n')
-    (package/'campaign.py').write_text('''import argparse,json,os,time
+    body = '''import argparse,json,os,time
 from pathlib import Path
 p=argparse.ArgumentParser()
 p.add_argument('--index',type=int)
+p.add_argument('--selection',type=Path)
 p.add_argument('--output-root',type=Path)
 a,_=p.parse_known_args()
+if a.selection is not None:a.index=json.loads(a.selection.read_text())['index']
 time.sleep(0.1)
 with (a.output_root/f'{a.index}.json').open('x') as f:
  json.dump({'affinity':sorted(os.sched_getaffinity(0))},f)
-''')
+print(json.dumps({'status':'success'}),flush=True)
+'''
+    (package/'campaign.py').write_text(body)
+    (package/'repair.py').write_text(body)
     output = tmp_path/'results'; output.mkdir()
     manifest = tmp_path/'manifest.json'
-    manifest.write_text(json.dumps({'workunits':[{'method_id':'fake'}]*3}))
+    manifest.write_text(json.dumps({'workunits':[{'method_id':'fake'}]*3,
+                                    'fits':[{'method':'fake'}]*3}))
+    selections=tmp_path/'selection';selections.mkdir()
+    for i in range(3):(selections/f'fake-{i}.json').write_text(json.dumps({'index':i}))
     config = tmp_path/'config.json'
     node = socket.gethostname().split('.')[0]
     config.write_text(json.dumps({'pool_output':str(tmp_path/'pool'), 'bundles':'/unused',
         'local_pool_root':str(tmp_path/'local-pool'),
         'archive':'/unused', 'supervisor_python':sys.executable,
+        'fit_selection_root':str(selections),
         'minimum_available_memory_gib':0, 'campaigns':[{'node':node,
-            'code':str(code), 'environment':'fake', 'method':'fake', 'kind':'tabular',
+            'code':str(code), 'environment':'fake', 'method':'fake', 'kind':kind,
             'manifest':str(manifest), 'output':str(output)}]}))
     subprocess.run([sys.executable, pool.__file__, '--config', str(config),
                     '--node', node, '--workers','2'], check=True,
@@ -91,3 +102,5 @@ with (a.output_root/f'{a.index}.json').open('x') as f:
     assert results[0]['affinity'] != results[1]['affinity']
     status = json.loads((tmp_path/'pool'/node/'test/status.json').read_text())
     assert status['completed']==3 and status['failed_workunits']==0
+    if kind == 'fit':
+        assert status['fit_status_counts'] == {'success': 3}

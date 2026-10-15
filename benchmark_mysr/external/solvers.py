@@ -48,6 +48,10 @@ def prepare(method, source_root):
         import torch
         torch.set_num_threads(1)
         from aifeynman import run_aifeynman
+        import aifeynman.S_gradient_decomposition as decomposition
+        native_consistency = decomposition.score_consistency
+        decomposition.score_consistency = lambda grads: stable_gradient_consistency(
+            grads, native_consistency)
         return run_aifeynman
     if method == 'tf4sr':
         sys.path.insert(0, str(Path(source_root) / 'tf4sr'))
@@ -220,6 +224,7 @@ def fit(method, api, X, y, request):
                 except (ValueError, TypeError, SyntaxError):
                     continue
         details['evaluation_semantics'] = 'no_native_evaluation_cap_wall_and_rss_limited'
+        details['gradient_consistency'] = 'native_regular_rows; scaled_float64_on_degenerate_rows'
     elif method == 'tf4sr':
         candidates, extra = fit_tf4sr(api, X, y, request)
         details.update(extra)
@@ -339,6 +344,37 @@ def fit_tf4sr(model, X, y, request):
         'constant_fit_penalty': 'finite_and_nonfinite_residuals_bounded_at_1e10',
         'preprocessing': 'official_log_scale_positive_training_rows; inverse_scale_export',
         'pretraining_overlap': 'not_audited_do_not_claim_unseen_formula_recovery'}
+
+
+def stable_gradient_consistency(grads_tensor, native_consistency):
+    """Retain native regular scoring; stabilize undefined gradient normalization.
+
+    Zero/nonfinite rows contribute no consistency evidence. Finite gradients
+    whose native norms overflow are normalized by their maximum magnitude in
+    float64 before eigendecomposition. No observations or search budgets change.
+    """
+    raw = np.asarray(grads_tensor.cpu().numpy())
+    if raw.ndim != 2:
+        raise ValueError('Expected a matrix of sampled native gradients')
+    with np.errstate(all='ignore'):
+        norms = np.linalg.norm(raw, axis=1)
+    if np.isfinite(raw).all() and np.isfinite(norms).all() and (norms > 0).all():
+        return native_consistency(grads_tensor)
+    values = np.asarray(raw, dtype=np.float64)
+    n, dimension = values.shape
+    if not n or not dimension:
+        return 0.0, np.zeros(dimension)
+    finite = np.isfinite(values).all(axis=1)
+    magnitude = np.max(np.abs(values), axis=1)
+    usable = finite & (magnitude > 0)
+    normalized = np.zeros_like(values)
+    scaled = values[usable] / magnitude[usable, None]
+    normalized[usable] = scaled / np.linalg.norm(scaled, axis=1)[:, None]
+    covariance = normalized.T @ normalized
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    if eigenvalues[-1] <= 0:
+        return 0.0, np.zeros(dimension)
+    return float(np.clip(eigenvalues[-1] / n, 0, 1)), eigenvectors[:, -1]
 
 
 def constant_fit_residual(error, scale):
