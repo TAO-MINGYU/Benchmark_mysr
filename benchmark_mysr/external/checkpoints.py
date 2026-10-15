@@ -6,6 +6,8 @@ Recovery uses the same native prediction functions, including protected GP ops.
 import math
 import csv
 import ast
+import hashlib
+import pickle
 import time
 from pathlib import Path
 
@@ -116,16 +118,46 @@ class NativeCheckpoint:
         dump('native-candidates.json', {'schema': 'native-token-checkpoint-v1',
              'method': self.request['method'], 'seed': self.request['seed'],
              'budget': self.request['budget'], 'library': library,
+             'comparison_protocol_sha256': self.request.get('comparison_protocol_sha256'),
              'evaluation_count': evaluations, 'candidates': rows,
              'scope': 'completed_native_programs_at_last_checkpoint_no_additional_search'})
         self.last = time.monotonic()
 
 
+class OperonCheckpoint:
+    """Serialize native trees only at safe, completed-generation callbacks."""
+    def __init__(self,request,interval=10):
+        self.request,self.interval,self.last=request,interval,float('-inf')
+
+    def write(self,algorithm,variables):
+        if time.monotonic()-self.last<self.interval:
+            return
+        trees=[individual.Genotype for individual in algorithm.BestFront]
+        if not trees:
+            return
+        raw=pickle.dumps(trees,protocol=pickle.HIGHEST_PROTOCOL)
+        checksum=hashlib.sha256(raw).hexdigest()
+        # A killed write must leave the previous JSON/tree pair recoverable.
+        # Publish each blob under a fresh immutable name, then its JSON pointer.
+        path=Path(f'operon-pareto-{int(algorithm.Generation)}-{checksum[:16]}.pkl')
+        temp=path.with_suffix('.pkl.tmp');temp.write_bytes(raw);temp.replace(path)
+        from .worker import dump
+        dump('native-candidates.json',{'schema':'native-operon-checkpoint-v1',
+             'method':'operon','seed':self.request['seed'],'budget':self.request['budget'],
+             'comparison_protocol_sha256':self.request.get('comparison_protocol_sha256'),
+             'pickle_file':path.name,'pickle_sha256':checksum,
+             'variables':variables,'generation':int(algorithm.Generation),'evaluation_count':None,
+             'scope':'native_pareto_at_last_completed_generation_no_additional_search'})
+        self.last=time.monotonic()
+
+
 def recover(request, api, X, y):
     import json
     payload = json.loads(Path(request['recover_native_candidates']).read_text())
-    if (payload['schema'] != 'native-token-checkpoint-v1' or
-            any(payload[k] != request[k] for k in ('method', 'seed', 'budget'))):
+    schema = 'native-operon-checkpoint-v1' if request['method']=='operon' else 'native-token-checkpoint-v1'
+    if (payload['schema'] != schema or
+            any(payload[k] != request[k] for k in ('method', 'seed', 'budget')) or
+            payload.get('comparison_protocol_sha256') != request.get('comparison_protocol_sha256')):
         raise ValueError('Native checkpoint identity differs from run request')
     candidates = []
     if request['method'] == 'dsr':
@@ -143,19 +175,47 @@ def recover(request, api, X, y):
             p.set_constants(row['constants'])
             candidates.append((dsr_expression(p), len(p.traversal), p.execute))
         semantics = 'native_sampled_programs_at_last_checkpoint'
+    elif request['method'] == 'operon':
+        import pyoperon as op
+        parent=Path(request['recover_native_candidates']).resolve().parent
+        path=(parent/payload['pickle_file']).resolve()
+        if path.parent!=parent:
+            raise ValueError('Native Operon checkpoint escapes its own artifact directory')
+        raw=path.read_bytes()
+        if hashlib.sha256(raw).hexdigest()!=payload['pickle_sha256']:
+            raise ValueError('Native Operon tree checkpoint checksum differs')
+        # Only our own same-run, identity/hash-checked native checkpoint is read.
+        trees=pickle.loads(raw)
+        model=api()
+        model.variables_={int(key):value for key,value in payload['variables'].items()}
+        for tree in trees:
+            values=model.evaluate_model(tree,X)
+            if np.isfinite(values).all():
+                scale,offset=op.FitLeastSquares(values,y)
+                nodes=tree.Nodes
+                if scale!=1:
+                    nodes += [op.Node.Constant(scale),op.Node.Mul()]
+                if offset!=0:
+                    nodes += [op.Node.Constant(offset),op.Node.Add()]
+                tree=op.Tree(nodes).UpdateNodes()
+            candidates.append((model.get_model_string(tree,precision=17,names=[f'x{i}' for i in range(X.shape[1])]),
+                               len(tree.Nodes),lambda Z,t=tree:model.evaluate_model(t,Z)))
+        semantics='native_fitness_count_not_exposed_at_checkpoint'
     elif request['method'] == 'gplearn':
         from gplearn._program import _Program
         from gplearn.functions import _function_map
         from gplearn.fitness import _fitness_map
         from .solvers import gplearn_expression
-        functions = [_function_map[n] for n in ('add', 'sub', 'mul', 'div', 'sin', 'cos', 'log', 'sqrt')]
+        from .solvers import gplearn_function_map
+        mapping = gplearn_function_map(request)
+        functions = list(mapping.values())
         arities = {n: [f for f in functions if f.arity == n] for n in (1, 2)}
         for row in payload['candidates']:
-            tokens = [_function_map[value] if kind == 'function' else value
+            tokens = [mapping[value] if kind == 'function' else value
                       for kind, value in row['tokens']]
             p = _Program(function_set=functions, arities=arities, init_depth=(2, 6),
                          init_method='half and half', n_features=X.shape[1],
-                         const_range=(-1, 1), metric=_fitness_map['mean absolute error'],
+                         const_range=(-1, 1), metric=_fitness_map['mse' if request.get('comparison_protocol') else 'mean absolute error'],
                          p_point_replace=0.05, parsimony_coefficient=0.001,
                          random_state=np.random.RandomState(request['seed']), program=tokens)
             candidates.append((gplearn_expression(p), p.length_, p.execute))

@@ -54,6 +54,13 @@ def main():
             raise NotApplicable('AI-Feynman is registered for known-expression tasks only.')
         train = read_split(Path(request['data']) / 'train.csv')
         val = read_split(Path(request['data']) / 'validation.csv')
+        from .fair import enabled, protocol, TrainScale
+        scale = None
+        native_X, native_y = train[0], train[1]
+        if enabled(request):
+            protocol(request)
+            scale = TrainScale(train[0], train[1], request.get('input_units', []))
+            native_X, native_y = scale.inputs(train[0]), scale.targets(train[1])
         if request.get('recover_pysr_candidates'):
             from .checkpoints import recover_pysr
             candidates, details = recover_pysr(request['recover_pysr_candidates'], train[0].shape[1])
@@ -62,7 +69,7 @@ def main():
         elif request.get('recover_native_candidates'):
             from .checkpoints import recover
             api = prepare(request['method'], request['source_root'])
-            candidates, details = recover(request, api, train[0], train[1])
+            candidates, details = recover(request, api, native_X, native_y)
             search_time = 0.0
             startup_time = time.monotonic()-started
         elif request.get('recover_candidates'):
@@ -83,12 +90,20 @@ def main():
             api = prepare(request['method'], request['source_root'])
             if request['method'] == 'pysr':
                 from benchmark_mysr.external.solvers import warmup_pysr
-                warmup_pysr(api, train[0].shape[1])
+                if scale is None:
+                    warmup_pysr(api, train[0].shape[1])
+                else:
+                    warmup_pysr(api, train[0].shape[1], precision=64)
             startup_time = time.monotonic()-started
             dump('stage.json', {'stage': 'search', 'time': time.time(), 'startup_seconds': startup_time})
             search_start = time.monotonic()
-            candidates, details = fit(request['method'], api, train[0], train[1], request)
+            candidates, details = fit(request['method'], api, native_X, native_y, request)
             search_time = details.pop('native_search_seconds', time.monotonic() - search_start)
+        if scale is not None:
+            candidates = scale.candidates(candidates)
+            details.update(preprocessing=scale.record(),
+                           comparison_protocol=request['comparison_protocol'],
+                           comparison_protocol_sha256=request['comparison_protocol_sha256'])
         dump('stage.json', {'stage': 'scoring', 'time': time.time(), 'search_seconds': search_time})
         scoring_started = time.monotonic()
         # Select using validation only. No test data is loaded until selection is frozen.
@@ -135,13 +150,15 @@ def main():
                   'test_numeric_agreement': bool(np.allclose(prediction, test[2], rtol=1e-6, atol=1e-8)) if request.get('ground_truth_available') else None}
         dump('worker-result.json', result)
     except NotApplicable as exc:
-        dump('worker-result.json', {'status': 'not_applicable', 'failure_status': 'not_applicable', 'reason': str(exc)})
+        dump('worker-result.json', {'status': 'not_applicable', 'failure_status': 'not_applicable',
+             'reason': str(exc), 'cpu_affinity': sorted(os.sched_getaffinity(0))})
     except Exception as exc:
         traceback.print_exc()
         invalid_model = isinstance(exc, InvalidOutput) or str(exc) == 'Nonfinite predictions/score'
         result = {'status': 'invalid_output' if invalid_model else 'solver_error',
                   'failure_status': type(exc).__name__, 'reason': str(exc),
-                  'failure_class': 'invalid_native_model_output' if invalid_model else 'requires_failure_cause_review'}
+                  'failure_class': 'invalid_native_model_output' if invalid_model else 'requires_failure_cause_review',
+                  'cpu_affinity': sorted(os.sched_getaffinity(0))}
         if Path('frontier.json').exists():
             result['full_frontier'] = 'frontier.json'
             result['frontier_count'] = len(frontier)

@@ -154,7 +154,8 @@ def run(request, output, env_root, startup_seconds=None, scoring_seconds=None):
                         pass
                 peak, cpu = max(peak,rss), max(cpu,used)
                 limit = {'startup': startup_seconds, 'search': request['budget']['search_seconds'], 'scoring': scoring_seconds}[stage]
-                if rss > request['budget']['memory_gib'] * 1024**3:
+                memory_limit = request['budget'].get('memory_gib')
+                if memory_limit is not None and rss > memory_limit * 1024**3:
                     timed_stage = 'memory_limit'
                 elif limit is not None and time.monotonic()-stage_start > limit + (2 if stage=='search' else 0):
                     timed_stage = stage + '_timeout'
@@ -187,6 +188,9 @@ def run(request, output, env_root, startup_seconds=None, scoring_seconds=None):
                       resource_measurement='waited_child_cpu_accounting_and_process_tree_rss_sampled_200ms_no_slurm_memory_claim',
                       stage=stage_info, formal_claim=False,
                       evidence_scope='registered_external_native_solver_run_pending_campaign_audit')
+        for key in ('comparison_protocol', 'comparison_protocol_sha256', 'component'):
+            if key in request:
+                result[key] = request[key]
         checkpoint = output/'native-frontier.json'
         native_checkpoint = output/'native-candidates.json'
         from .checkpoints import pysr_checkpoint

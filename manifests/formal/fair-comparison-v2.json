@@ -1,0 +1,28 @@
+{
+  "schema_version": "fair-external-comparison-v2",
+  "protocol_id": "common-cpu-train-scale-v2",
+  "scope": "All originally registered six-external tasks, variants, tracks and ten seeds. New complete run; never merge scientific scores from v1.",
+  "budget_unit": "one scalar target, including each ODE derivative component",
+  "tracks": {
+    "constrained_resource": {"search_seconds": 120, "evaluations": null, "memory_gib": null},
+    "capability_ceiling": {"search_seconds": 900, "evaluations": null, "memory_gib": null}
+  },
+  "hardware": {"node": "carbon", "threads_per_fit": 1, "physical_core_per_fit": true, "pool_workers": 128, "slurm_time": "UNLIMITED", "slurm_memory": 0},
+  "clock": "Data-dependent fitting/optimization/decoding is search. Imports and synthetic compilation warmup are separate; exports and held-out scoring are separate and measured. Native evaluation counts are descriptive, never equalized across algorithms.",
+  "preprocessing": "train_max_abs_multiplicative_no_center_v1; angular radian columns retain scale1; inverse transform predictions and expression text; no validation/test statistics",
+  "selection": "minimum validation MSE, then native complexity, then expression text; load test only after freezing selection; retain invalid outcomes",
+  "common_requested_vocabulary": ["add", "sub", "mul", "div", "sin", "cos", "exp", "log", "sqrt", "constant", "input"],
+  "operator_scope": "Native-method comparison under common compute, not an identical-grammar experiment. Document protected versus ordinary operators, AI-Feynman's fixed grammar, and pretrained TF4SR grammar separately.",
+  "methods": {
+    "pysr": {"precision": 64, "populations": 31, "population_size": 27, "maxsize": 30, "numeric_export": "native CSV operation order, no symbolic rewriting"},
+    "operon": {"population_size": 1000, "optimizer_iterations": 10, "optimizer": "lm", "objectives": ["mse", "length"], "native_scalar": "installed build; record actual dtype; train scaling avoids physical-unit overflow"},
+    "dsr": {"batch_size": 100, "protected": false, "function_set": ["add", "sub", "mul", "div", "sin", "cos", "exp", "log", "sqrt", "const"], "gp_meld": false},
+    "gplearn": {"population_size": 1000, "metric": "mse", "exp": "ordinary NumPy exp via native make_function", "protected_native": ["div", "log", "sqrt"]},
+    "ai_feynman_2": {"BF_ops_file_type": "14ops.txt", "polyfit_deg": 3, "NN_epochs": 100, "test_percentage": 0, "gradient_guard": "scaled float64 for degenerate gradients; regular native path unchanged"},
+    "tf4sr": {"decode": "single greedy with valid input-variable and tree-completion mask", "max_tokens": 30, "constants": "shared positive C matching native symbol assumptions; train-only max_nfev200", "pretrained": true, "overlap": "unknown; separate pretrained stratum; no unseen-formula claim"},
+    "mysr": {"execution": "later, same frozen data/scales/seed/track/one physical CPU and validation-only selection", "precision": 64, "evaluation_limit": null, "problem_unit": "scalar target; independent ODE components", "priors": "no reference equation, held-out data or task-specific tuning; document algorithm features and training provenance"}
+  },
+  "not_applicable": "Preserve the original method registry and documented dimensional/input requirements; never exclude a task because its fitted model failed.",
+  "failure_metrics": {"raw_error": "null for invalid/no-model outputs", "primary": "prediction coverage and fixed-threshold NRMSE attainment over all registered applicable fits", "nrmse_thresholds": [0.000001, 0.0001, 0.01, 0.1, 1, 10], "conditional_error": "supplement with denominator; do not silently drop failures"},
+  "prior_results": "Retained unchanged as v1; no selection of the best test outcome across epochs or retries."
+}

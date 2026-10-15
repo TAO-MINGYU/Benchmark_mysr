@@ -33,6 +33,18 @@ def available_memory_gib():
     return int(fields['MemAvailable'].split()[0]) / 1024**2
 
 
+def physical_cpus(cpus, topology=Path('/sys/devices/system/cpu')):
+    """Use at most one allowed hardware thread per physical core."""
+    seen, chosen = set(), []
+    for cpu in cpus:
+        directory = topology/f'cpu{cpu}'/'topology'
+        key = tuple((directory/name).read_text().strip() for name in ('physical_package_id','core_id'))
+        if key not in seen:
+            seen.add(key)
+            chosen.append(cpu)
+    return chosen
+
+
 def clear_stale_locks(roots, minimum_age_seconds=600):
     removed = []
     now = time.time()
@@ -47,6 +59,11 @@ def clear_stale_locks(roots, minimum_age_seconds=600):
 
 
 def command(entry, config, cpu, env_root, sources):
+    if entry['kind'] == 'comparison_fit':
+        return ['taskset', '-c', str(cpu), config['supervisor_python'], '-m',
+                'benchmark_mysr.external.fair', '--requests', config['requests'],
+                '--offset', str(entry['request_offset']), '--sha256', entry['request_sha256'],
+                '--output-root', entry['output'], '--env-root', str(env_root), '--sources', str(sources)]
     if entry['kind'] == 'fit':
         return ['taskset', '-c', str(cpu), config['supervisor_python'], '-m',
                 'benchmark_mysr.external.repair', '--selection',
@@ -75,7 +92,20 @@ def main():
     parser.add_argument('--workers', type=int, default=512)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
+    if config.get('comparison_requests_sha256'):
+        def file_sha(path):
+            digest=hashlib.sha256()
+            with Path(path).open('rb') as stream:
+                for block in iter(lambda:stream.read(1024*1024),b''):
+                    digest.update(block)
+            return digest.hexdigest()
+        if file_sha(config['requests'])!=config['comparison_requests_sha256']:
+            raise ValueError('Comparison requests changed before launch')
+        if any(file_sha(entry['manifest'])!=config['comparison_index_sha256'] for entry in config['campaigns']):
+            raise ValueError('Comparison dispatch index changed before launch')
     cpus = sorted(os.sched_getaffinity(0))
+    if config.get('physical_cores_only'):
+        cpus = physical_cpus(cpus)
     if args.workers > len(cpus):
         raise ValueError(f'{args.workers} workers requested but only {len(cpus)} CPUs allowed')
     if socket.gethostname().split('.')[0] != args.node:
@@ -102,6 +132,7 @@ def main():
             entry['code'] = str(stage_extra('adapter_'+entry['adapter_commit'][:7]))
     environments, sources = {}, None
     groups = []
+    manifests = {}
     for entry in assigned:
         code = Path(entry['code'])
         for name in (entry['environment'], 'sources'):
@@ -113,18 +144,23 @@ def main():
                 sources = root
             else:
                 environments[entry['method']] = root
-        manifest = json.loads(Path(entry['manifest']).read_text())
-        if entry['kind'] == 'fit':
+        if entry['manifest'] not in manifests:
+            manifests[entry['manifest']] = json.loads(Path(entry['manifest']).read_text())
+        manifest = manifests[entry['manifest']]
+        if entry['kind'] in ('fit','comparison_fit'):
             units = [u for u in manifest['fits'] if u['method'] == entry['method']]
         else:
             units = [u for u in manifest['workunits'] if u['method_id'] == entry['method']]
-        groups.append([dict(entry, index=i) for i in range(len(units))])
+        groups.append([dict(entry, index=i, **({'request_offset':u['offset'], 'request_sha256':u['sha256']}
+                                             if entry['kind']=='comparison_fit' else {}))
+                       for i,u in enumerate(units)])
     queue = deque(interleave(groups))
     config_hash = hashlib.sha256(args.config.read_bytes()).hexdigest()
     write_json(output/'allocation.json', {
         'node': args.node, 'job_id': os.environ['SLURM_JOB_ID'], 'cpus': cpus[:args.workers],
         'workers': args.workers, 'config_sha256': config_hash, 'unit_count': len(queue),
         'single_thread_per_fit': True,
+        'physical_cores_only': config.get('physical_cores_only', False),
         'resource_epoch': config.get('resource_epoch', 'full-node-smt-v1'),
         'minimum_available_memory_gib': config['minimum_available_memory_gib'],
         'started_at': time.time(), 'node_local_logs': str(output),
@@ -165,7 +201,7 @@ def main():
                     completed += 1
                     failures += proc.returncode != 0
                     log.close()
-                    if entry['kind'] == 'fit':
+                    if entry['kind'] in ('fit','comparison_fit'):
                         try:
                             with Path(log.name).open('rb') as handle:
                                 handle.seek(max(0, Path(log.name).stat().st_size - 4096))
@@ -225,6 +261,16 @@ def main():
     log_publisher.shutdown()
     for copy in log_copies:
         copy.result()
+    if config.get('finalize_comparison'):
+        env = dict(os.environ,PYTHONPATH=assigned[0]['code'],OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
+        result = subprocess.run([config['supervisor_python'],'-m','benchmark_mysr.external.fair_finalize',
+            '--requests',config['requests'],'--output-root',assigned[0]['output'],
+            '--report-root',config['comparison_report_root'],'--workers',str(min(args.workers,16)),
+            '--expected-count',str(config['expected_fit_count']),
+            '--expected-ode',str(config['expected_ode_count']),
+            '--requests-sha256',config['comparison_requests_sha256']],env=env)
+        if result.returncode:
+            failures += 1
     return 1 if failures else 0
 
 

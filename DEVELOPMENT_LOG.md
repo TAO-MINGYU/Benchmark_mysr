@@ -160,3 +160,37 @@
   timeout checkpoints can contribute errors; invalid predictions remain explicit
   failures, never manufactured expressions or silently dropped observations.
   Full matrix/ODE integration and matched MySR runs remain separate work.
+
+## 2026-10-15 — Full external common-compute comparison v2
+
+- Freeze a new complete six-method matrix and later MySR contract. Use one
+  physical CPU per scalar target, 120/900-second scientific search budgets,
+  full budgets per independent ODE component, no cross-method evaluation cap
+  and no Slurm/startup/scoring time or memory cap.
+- Add training-only max-absolute multiplicative scaling with original-unit
+  prediction replay and public radian metadata. Keep validation-only selection,
+  invalid held-out predictions and all prior scientific evidence.
+- Enable Operon LM coefficient optimization, PySR Float64/native populations,
+  gplearn MSE and exp, DSR sqrt and valid TF4SR single greedy decoding. Retain
+  native operator/applicability/pretraining differences rather than claiming an
+  identical-grammar experiment. Preserve safe completed-generation Operon
+  native trees for timeout replay.
+- Expand original manifests into 221,400 fresh scalar fits (189,000 top-level
+  slots), checksum-guarded indexed requests and immutable data snapshots. Extend
+  the pool with physical-core assignment and automatic independent prediction,
+  provenance, complete-count and ODE aggregation audits after the queue drains.
+- Unit tests cover train-only preprocessing, both budgets, native constructor
+  settings, checkpoint/export paths, grammar masks, request integrity, physical
+  topology and audit failure/ODE completeness. Native production-route gates
+  and final deployment evidence are retained with the separate run artifacts;
+  no claim that a smoke test proves complete results or algorithm superiority.
+- Final complete suite:55 passed in9.78s; compilation and diff checks pass. The
+  exact frozen native release passed18 production-route basic/stress/ODE cases
+  across all6 methods with zero provenance/runtime/scoring-audit issues:16 have
+  complete finite scores,1 PySR ODE selection has genuine invalid held-out
+  predictions,1 TF4SR ODE case is registered inapplicable. Timeout recovery is
+  verified for PySR/DSR/gplearn/AI-Feynman; a search timeout is not a solver
+  exception. A later isolated Operon checkpoint publication change uses immutable
+  generation/hash blobs so interrupted writes preserve the previous JSON/tree
+  pair; its interruption regression passes, with native revalidation retained
+  separately. Complete formal outcomes remain unknown until the full run ends.
