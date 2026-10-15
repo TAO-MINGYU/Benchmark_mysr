@@ -144,7 +144,13 @@
   timeout/process supervision, invalid-domain evidence retention and changed
   checkpoint rejection. Native PySR CSV recovery is checked separately in the
   B6 run archive. No search, operator, constant-fit or selection changes.
-- Deployment selection:4,546 unresolved B5 fits;394 existing-checkpoint recoveries
-  and4,152 original-budget native reruns, with all prior results retained.
-  This repairs evidence loss; it does not guarantee that an algorithm produces
-  a finite model for every task or establish a complete scientific comparison.
+- Final deployment selection:394 existing-checkpoint recoveries from4,546
+  unresolved B5 fits. The user requested the approach appropriate for comparison
+  against MySR; retain original protocols and count genuine invalid/budget
+  outcomes in prediction coverage and error-threshold success rates. Do not
+  spend4,152 additional searches repeating unchanged native mathematical
+  failures. Preserve the superseded unsubmitted manifest and all raw results.
+- Document the same outcome rules for every external method and MySR. Finite
+  timeout checkpoints can contribute errors; invalid predictions remain explicit
+  failures, never manufactured expressions or silently dropped observations.
+  Full matrix/ODE integration and matched MySR runs remain separate work.
