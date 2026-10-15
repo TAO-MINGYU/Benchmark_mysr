@@ -130,8 +130,10 @@
 
 ## 2026-10-15 — Preserve timeout models and invalid held-out predictions
 
-- Recover PySR's actual search hall-of-fame CSV with its native expression and
-  NumPy exporters, excluding synthetic compilation output and additional search.
+- Recover PySR's actual search hall-of-fame CSV by evaluating its original
+  arithmetic with a closed NumPy operation tree. Preserve native expression
+  text/node counts and ordinary operator domains; exclude synthetic compilation
+  output, symbolic rewriting, Julia initialization and additional search.
 - Retain validation-selected expressions, finite training/validation scores and
   frontier provenance even when a timeout recovery fails held-out prediction.
   Keep the original timeout and explicit partial-result status.
@@ -140,10 +142,14 @@
   validation winner frozen and preserve invalid scientific outcomes.
 - Permit checksum-guarded replay of an existing native checkpoint instead of
   spending another search budget; retain the original data/seed/budget identity.
-- Validation: complete Benchmark suite40 passed in9.81s, including actual
+- Validation: complete Benchmark suite42 passed, including actual
   timeout/process supervision, invalid-domain evidence retention and changed
-  checkpoint rejection. Native PySR CSV recovery is checked separately in the
-  B6 run archive. No search, operator, constant-fit or selection changes.
+  checkpoint rejection. The2 original PySR cases replay through the actual
+  production route in0.66s:all25 CSV candidates match independent direct-operation
+  predictions exactly on all3 actual splits. Their selected models still fail
+  test-domain scoring and remain explicit timeout/invalid outcomes. Superseded
+  symbolic-export validations and their stopped-process evidence are retained;
+  no production job was interrupted. No native search/constant-fit changes.
 - Final deployment selection:394 existing-checkpoint recoveries from4,546
   unresolved B5 fits. The user requested the approach appropriate for comparison
   against MySR; retain original protocols and count genuine invalid/budget

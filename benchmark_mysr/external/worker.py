@@ -56,7 +56,6 @@ def main():
         val = read_split(Path(request['data']) / 'validation.csv')
         if request.get('recover_pysr_candidates'):
             from .checkpoints import recover_pysr
-            prepare(request['method'], request['source_root'])
             candidates, details = recover_pysr(request['recover_pysr_candidates'], train[0].shape[1])
             search_time = 0.0
             startup_time = time.monotonic()-started

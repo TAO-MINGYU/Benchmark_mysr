@@ -155,6 +155,44 @@ def test_pysr_checkpoint_excludes_warmup_and_uses_backup_only_for_bad_primary(tm
     assert pysr_checkpoint(tmp_path) is None
 
 
+def test_pysr_csv_replay_never_loads_search_and_keeps_domain_and_precision(tmp_path, monkeypatch):
+    import builtins
+    import csv
+    from benchmark_mysr.external.checkpoints import recover_pysr
+    path = tmp_path/'native.csv'
+    with path.open('w') as stream:
+        writer = csv.writer(stream)
+        writer.writerow(['Complexity', 'Loss', 'Equation'])
+        writer.writerow([6, 0, 'log(x0) + sqrt(x1) + 0.12345678912345678'])
+    native_import = builtins.__import__
+    def without_search(name, *a, **kw):
+        if name.split('.')[0] in ('pysr', 'juliacall', 'sympy'):
+            raise AssertionError('CSV recovery initialized search or symbolic rewriting')
+        return native_import(name, *a, **kw)
+    monkeypatch.setattr(builtins, '__import__', without_search)
+    candidates, details = recover_pysr(path, 2)
+    assert len(candidates) == 1 and candidates[0][1] == 6
+    X = np.array([[1., 4.], [-1., 4.]])
+    with np.errstate(all='ignore'):
+        prediction = candidates[0][2](X)
+    assert prediction[0] == pytest.approx(2.12345678912345678, abs=1e-15)
+    assert np.isnan(prediction[1])
+    assert details['additional_search'] is False
+
+
+def test_pysr_csv_replay_preserves_raw_arithmetic_and_rejects_code(tmp_path):
+    from benchmark_mysr.external.checkpoints import pysr_csv_predictor
+    X = np.array([[0., 2.], [1., 3.]])
+    with np.errstate(all='ignore'):
+        actual = pysr_csv_predictor('x0 / x0 + cos(x1) - exp(-x1)', 2)(X)
+    assert np.isnan(actual[0])
+    assert actual[1] == pytest.approx(1 + np.cos(3) - np.exp(-3))
+    assert np.array_equal(pysr_csv_predictor('x1^2', 2)(X), [4, 9])
+    for invalid in ('x2', '__import__("os").system("true")', 'x0[0]', 'sin(x0, x1)'):
+        with pytest.raises(ValueError, match='absent feature or unsupported'):
+            pysr_csv_predictor(invalid, 2)
+
+
 def test_timeout_recovery_retains_expression_even_when_test_domain_is_invalid(tmp_path, monkeypatch):
     import os
     import sys

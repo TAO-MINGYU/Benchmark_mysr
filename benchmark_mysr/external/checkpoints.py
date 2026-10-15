@@ -5,6 +5,7 @@ Recovery uses the same native prediction functions, including protected GP ops.
 """
 import math
 import csv
+import ast
 import time
 from pathlib import Path
 
@@ -28,24 +29,52 @@ def pysr_checkpoint(output):
     return None
 
 
+def pysr_csv_predictor(expression, n_features):
+    """Evaluate native CSV operations without symbolic rewrites or code eval."""
+    binary = {ast.Add: np.add, ast.Sub: np.subtract, ast.Mult: np.multiply,
+              ast.Div: np.divide, ast.Pow: np.power}
+    unary = {ast.UAdd: np.positive, ast.USub: np.negative}
+    functions = {'sin': np.sin, 'cos': np.cos, 'exp': np.exp,
+                 'log': np.log, 'sqrt': np.sqrt}
+    names = {f'x{i}': i for i in range(n_features)}
+    def build(node):
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            value = np.float64(node.value)
+            return lambda X: value
+        if isinstance(node, ast.Name) and node.id in names:
+            index = names[node.id]
+            return lambda X: X[:, index]
+        if isinstance(node, ast.BinOp) and type(node.op) in binary:
+            operation, left, right = binary[type(node.op)], build(node.left), build(node.right)
+            return lambda X: operation(left(X), right(X))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in unary:
+            operation, child = unary[type(node.op)], build(node.operand)
+            return lambda X: operation(child(X))
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id in functions and len(node.args) == 1 and not node.keywords):
+            operation, child = functions[node.func.id], build(node.args[0])
+            return lambda X: operation(child(X))
+        raise ValueError('PySR checkpoint contains an absent feature or unsupported operation')
+    function = build(ast.parse(expression.replace('^', '**'), mode='eval').body)
+    return lambda X: np.broadcast_to(function(X), (X.shape[0],))
+
+
 def recover_pysr(path, n_features):
-    """Use native PySR exporters on a completed CSV snapshot, with no search."""
-    from pysr.export_sympy import pysr2sympy
-    from pysr.export_numpy import sympy2numpy
-    import sympy as sp
-    names = [f'x{i}' for i in range(n_features)]
-    symbols = [sp.Symbol(name) for name in names]
+    """Replay actual search CSV models without Julia or symbolic conversion.
+
+    Keep native expression text/node counts and ordinary NumPy operator domains.
+    In particular, nested roots need no potentially expensive symbolic rewrite.
+    """
     with Path(path).open() as stream:
         rows = list(csv.DictReader(stream))
     candidates = []
     for row in rows:
-        expr = pysr2sympy(row['Equation'], feature_names_in=names)
-        if expr.free_symbols - set(symbols):
-            raise ValueError('PySR checkpoint contains an absent feature')
-        candidates.append((str(expr), int(row['Complexity']), sympy2numpy(expr, symbols)))
+        candidates.append((row['Equation'], int(row['Complexity']),
+                           pysr_csv_predictor(row['Equation'], n_features)))
     return candidates, {'evaluation_count': None,
                         'evaluation_semantics': 'native_max_evals_enforced_actual_count_not_exposed',
-                        'frontier_kind': 'native_pysr_csv_at_timeout', 'additional_search': False}
+                        'frontier_kind': 'native_pysr_csv_at_timeout', 'additional_search': False,
+                        'prediction_semantics': 'native_csv_operation_order_numpy_float64_no_symbolic_rewrite'}
 
 
 class NativeCheckpoint:
