@@ -33,6 +33,22 @@ def available_memory_gib():
     return int(fields['MemAvailable'].split()[0]) / 1024**2
 
 
+def finish_publication(future, local_output, operation):
+    """Record optional replica storage errors without masking other failures."""
+    if future is None:
+        return True
+    try:
+        future.result()
+        return True
+    except OSError as exc:
+        record = {'time': time.time(), 'operation': operation,
+                  'error': repr(exc), 'authoritative_logs': str(local_output)}
+        with (local_output/'publication-errors.jsonl').open('a') as stream:
+            stream.write(json.dumps(record)+'\n')
+        print(json.dumps(record), flush=True)
+        return False
+
+
 def physical_cpus(cpus, topology=Path('/sys/devices/system/cpu')):
     """Use at most one allowed hardware thread per physical core."""
     seen, chosen = set(), []
@@ -239,28 +255,28 @@ def main():
             write_json(output/'status.json', status)
             final = stop or not (queue or active)
             if final and publication is not None:
-                publication.result()
+                finish_publication(publication, output, 'status_replica')
             if final or ((publication is None or publication.done()) and time.monotonic()-last_publication >= 10):
                 if publication is not None:
-                    publication.result()
+                    finish_publication(publication, output, 'status_replica')
                 publication = publisher.submit(publish, status, (output/'events.jsonl').read_text())
                 last_publication = time.monotonic()
             if stop:
                 # Slurm owns the cgroup, including detached native solver descendants.
                 # Leave interruption evidence for explicit, audited resume preparation.
-                publication.result()
+                finish_publication(publication, output, 'status_replica')
                 publisher.shutdown()
                 log_publisher.shutdown()
                 for copy in log_copies:
-                    copy.result()
+                    finish_publication(copy, output, 'worker_log_replica')
                 return 143
             if queue or active:
                 time.sleep(1)
-    publication.result()
+    replicas_ok = finish_publication(publication, output, 'status_replica')
     publisher.shutdown()
     log_publisher.shutdown()
     for copy in log_copies:
-        copy.result()
+        replicas_ok = finish_publication(copy, output, 'worker_log_replica') and replicas_ok
     if config.get('finalize_comparison'):
         env = dict(os.environ,PYTHONPATH=assigned[0]['code'],OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
         result = subprocess.run([config['supervisor_python'],'-m','benchmark_mysr.external.fair_finalize',
@@ -271,7 +287,7 @@ def main():
             '--requests-sha256',config['comparison_requests_sha256']],env=env)
         if result.returncode:
             failures += 1
-    return 1 if failures else 0
+    return 1 if failures or not replicas_ok else 0
 
 
 if __name__ == '__main__':

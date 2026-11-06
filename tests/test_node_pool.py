@@ -1,10 +1,71 @@
+import errno
+from concurrent.futures import Future
 import importlib.util
+import json
 from pathlib import Path
+import sys
 import pytest
 
 spec = importlib.util.spec_from_file_location('node_pool', Path(__file__).resolve().parents[1]/'scripts/external/node_pool.py')
 pool = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pool)
+
+
+def test_enospc_replica_preserves_authoritative_journal_and_returns(tmp_path):
+    journal = tmp_path/'events.jsonl'
+    journal.write_text('{"event":"completed"}\n')
+    future = Future()
+    future.set_exception(OSError(errno.ENOSPC, 'No space left on device'))
+    assert pool.finish_publication(future, tmp_path, 'status_replica') is False
+    assert journal.read_text() == '{"event":"completed"}\n'
+    error = json.loads((tmp_path/'publication-errors.jsonl').read_text())
+    assert error['operation'] == 'status_replica'
+    successful = Future()
+    successful.set_result(None)
+    assert pool.finish_publication(successful, tmp_path, 'status_replica') is True
+
+
+def test_programming_error_is_not_hidden_as_storage_failure(tmp_path):
+    future = Future()
+    future.set_exception(ValueError('wrong identity'))
+    with pytest.raises(ValueError, match='wrong identity'):
+        pool.finish_publication(future, tmp_path, 'status_replica')
+
+
+def test_pool_runs_all_units_when_first_status_replica_fills_disk(tmp_path, monkeypatch):
+    manifest = tmp_path/'index.json'
+    manifest.write_text(json.dumps({'fits': [{'method': 'gplearn', 'offset': i, 'sha256': 'frozen'}
+                                            for i in range(2)]}))
+    config = {'pool_output': str(tmp_path/'replica'), 'local_pool_root': str(tmp_path/'journal'),
+              'minimum_available_memory_gib': 0, 'bundles': 'unused',
+              'campaigns': [{'node': 'carbon', 'kind': 'comparison_fit', 'method': 'gplearn',
+                             'code': str(tmp_path), 'environment': 'unused',
+                             'manifest': str(manifest), 'output': str(tmp_path/'results')}]}
+    config_path = tmp_path/'config.json'
+    config_path.write_text(json.dumps(config))
+    monkeypatch.setenv('SLURM_JOB_ID', '888')
+    monkeypatch.setattr(pool.socket, 'gethostname', lambda: 'carbon')
+    monkeypatch.setattr(pool.signal, 'signal', lambda *a: None)
+    monkeypatch.setattr(pool.subprocess, 'check_output', lambda *a, **k: str(tmp_path))
+    monkeypatch.setattr(pool, 'command', lambda *a: [
+        sys.executable, '-c', 'print(\'{"status":"success"}\')'])
+    monkeypatch.setattr(sys, 'argv', ['pool', '--config', str(config_path), '--node', 'carbon', '--workers', '1'])
+    original_write = pool.write_json
+    failures = []
+
+    def flaky_write(path, value):
+        if path == tmp_path/'replica/carbon/888/status.json' and not failures:
+            failures.append(path)
+            raise OSError(errno.ENOSPC, 'Injected replica failure')
+        original_write(path, value)
+
+    monkeypatch.setattr(pool, 'write_json', flaky_write)
+    assert pool.main() == 0
+    final = json.loads((tmp_path/'replica/carbon/888/status.json').read_text())
+    assert final['completed'] == 2 and final['queued'] == final['active'] == 0
+    events = [json.loads(line) for line in (tmp_path/'journal/888/events.jsonl').read_text().splitlines()]
+    assert [row['index'] for row in events if row['event'] == 'completed'] == [0, 1]
+    assert failures
 
 
 def test_pool_covers_all_units_without_duplicating_ragged_groups():

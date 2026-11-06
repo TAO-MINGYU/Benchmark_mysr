@@ -194,3 +194,19 @@
   generation/hash blobs so interrupted writes preserve the previous JSON/tree
   pair; its interruption regression passes, with native revalidation retained
   separately. Complete formal outcomes remain unknown until the full run ends.
+
+## 2026-11-06 — Preserve work when optional pool replicas fail
+
+- Migrate only the optional publication error handling from the preserved B7
+  maintenance tools into the existing node pool. Status/worker-log replica
+  `OSError` is recorded beside the authoritative local journal; it does not stop
+  active work. A failed final replica makes the pool exit nonzero. Local journal
+  failures and non-storage exceptions continue to propagate.
+- Reuse three focused regression cases for ENOSPC journal preservation,
+  programming-error propagation and completion after a transient replica failure.
+  No new scheduler, storage admission threshold, scientific settings or frontend
+  parameters are introduced; the old worktree remains unchanged for archival.
+- Independent source review passed. Root ran the complete Benchmark suite:
+  58 tests passed in 11.83 seconds. Retained log and JUnit evidence:
+  `maintenance/main-consolidation-20261106-01a187aa/benchmark-tests.log` and
+  `maintenance/main-consolidation-20261106-01a187aa/benchmark-tests.xml`.
